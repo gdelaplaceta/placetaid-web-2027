@@ -60,6 +60,7 @@ type Service = {
 type Integration = {
   id: string
   clientId?: string
+  redirectUris?: string[]
   name: string
   category: string
   initials: string
@@ -620,6 +621,7 @@ function App() {
               </div>
 
               {selected && <aside className="policy-panel">
+                <div className="policy-section integration-endpoint-section"><div className="policy-section-heading"><div><h3>Endpoint de la aplicación</h3><p>URL exacta para iniciar PlacetaID</p></div><Code2 size={16} /></div><div className="endpoint-row"><span className="field-label">Client ID</span><code>{selected.clientId ?? 'Pendiente de registrar'}</code></div><label className="field-label" htmlFor="redirect-uris">Redirect URIs permitidas</label><textarea id="redirect-uris" className="redirect-uri-input" rows={3} value={(selected.redirectUris ?? []).join('\n')} placeholder="https://app.ejemplo.org/placetaid/callback" onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, redirectUris: event.target.value.split(/\n|,/).map((uri) => uri.trim()).filter(Boolean), updated: 'Ahora' }))} /><small className="field-help">Debe coincidir exactamente con el parámetro <code>redirect_uri</code>, incluido protocolo, dominio, puerto y ruta.</small></div>
                 <div className="policy-topline"><span className="eyebrow">FICHA DE INTEGRACIÓN</span><button className="more-button" aria-label="Más opciones" onClick={() => showToast('No hay más acciones disponibles en la vista previa')}><span /><span /><span /></button></div>
                 <div className="policy-app-heading"><span className={`app-mark app-mark-large app-mark-${selected.color}`}>{selected.initials}</span><div><h2>{selected.name}</h2><span>{selected.category} <span className="separator-dot">·</span> ID {selected.id.toUpperCase()}</span></div></div>
                 <div className="authorization-row"><div><strong>{selected.status === 'authorized' ? 'Integración autorizada' : selected.status === 'pending' ? 'Solicitud pendiente' : 'Integración desactivada'}</strong><small>{selected.status === 'authorized' ? 'Puede iniciar el flujo de acceso' : selected.status === 'pending' ? 'Aún no puede iniciar sesión' : 'El acceso está bloqueado para todos'}</small></div><button className={`switch ${selected.status === 'authorized' ? 'switch-on' : ''}`} role="switch" aria-checked={selected.status === 'authorized'} aria-label="Autorizar aplicación" onClick={() => toggleStatus(selected)}><span /></button></div>
