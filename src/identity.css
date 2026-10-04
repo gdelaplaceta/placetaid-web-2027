@@ -200,6 +200,13 @@
   .gateway-flow-panel { border-right: 0; border-bottom: 1px solid #d6c6ec; }
 }
 
+/* Logo oficial sobre barra blanca */
+.public-topbar { background: #fff; border-bottom-color: #e5ddf2; }
+.public-brand { width: 255px; height: 58px; background: #fff url('/placetaid-logo.svg') center / contain no-repeat; }
+.public-brand > .brand-mark, .public-brand > span:last-child { display: none; }
+.public-topbar .public-action { color: #32105f; }
+@media (max-width: 600px) { .public-brand { width: 180px; height: 48px; } }
+
 /* Plan 2027 public landing and centered gateway polish */
 .public-home { max-width: 1180px; margin: 0 auto; padding: 76px 5vw 40px; }
 .home-access-note { display: inline-flex; align-items: center; gap: 9px; color: #e7dcff; font-size: 12px; line-height: 1.5; }.home-access-note code { color: #fff; font: 700 11px "DM Mono", monospace; }
@@ -222,6 +229,10 @@
 .public-home-features span { color: #c4b5fd; font: 12px "DM Mono", monospace; }.public-home-features h3 { margin: 13px 0 7px; color: #fff; font: 400 25px Baruta, sans-serif; }.public-home-features p { margin: 0; color: #d8c8ff; font-size: 12px; }
 .public-home-cta { display: flex; justify-content: space-between; align-items: center; padding: 58px 0 10px; }.public-home-cta h2 { margin-top: 12px; color: white; font: 400 42px Baruta, sans-serif; }
 .public-topbar { min-height: 78px; box-shadow: 0 8px 24px #14072955; }.public-topbar-actions { gap: 14px; }
+.public-topbar { background: #fff; border-bottom: 1px solid #e5ddf2; }
+.public-brand { width: 255px; height: 58px; border-radius: 10px; background: #fff url('/placetaid-logo.svg') center / contain no-repeat; }
+.public-brand > .brand-mark, .public-brand > span:last-child { display: none; }
+.public-brand:focus-visible { outline-color: #5b21b6; }
 .gateway-page { display: flex; flex-direction: column; align-items: center; }.gateway-page > .page-heading, .gateway-page > .gateway-layout, .gateway-page > .gateway-privacy-footer { width: min(1120px, 100%); }.gateway-layout { margin-inline: auto; }
 @media (max-width: 760px) { .public-home { padding-top: 45px; }.public-home-hero { grid-template-columns: 1fr; gap: 35px; min-height: auto; }.public-home-card { padding: 27px; }.home-card-icon { margin-bottom: 30px; }.public-home-features { grid-template-columns: 1fr; gap: 22px; }.public-home-cta { align-items: flex-start; flex-direction: column; gap: 20px; }.public-home-cta h2 { font-size: 34px; } }
 @media (max-width: 760px) {
@@ -517,3 +528,10 @@
   .plan-dialog h2 { font-size: 21px; }
   .legal-document-modal { max-height: 82dvh; padding: 16px; border-radius: 18px 18px 0 0; align-self: end; }
 }
+
+/* Logo oficial sobre barra blanca */
+.public-topbar { background: #fff; border-bottom-color: #e5ddf2; }
+.public-brand { width: 255px; height: 58px; background: #fff url('/placetaid-logo.svg') center / contain no-repeat; }
+.public-brand > .brand-mark, .public-brand > span:last-child { display: none; }
+.public-topbar .public-action { color: #32105f; }
+@media (max-width: 600px) { .public-brand { width: 180px; height: 48px; } }
