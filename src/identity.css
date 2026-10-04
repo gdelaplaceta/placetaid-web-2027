@@ -207,6 +207,62 @@
 .public-topbar .public-action { color: #32105f; }
 @media (max-width: 600px) { .public-brand { width: 180px; height: 48px; } }
 
+/* Sistema visual responsive v27 */
+html { font-size: clamp(14px, .25vw + 13px, 16px); }
+button, input, select, textarea { font-family: inherit; }
+button { min-height: 38px; }
+.public-main { overflow-x: hidden; }
+.public-topbar { position: sticky; top: 0; z-index: 20; padding-inline: clamp(14px, 5vw, 72px); }
+.public-topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+.public-action, .admin-entry { min-height: 38px; padding: 0 13px; border-radius: 10px; }
+.public-home-copy p { max-width: 56ch; }
+.gateway-page { padding-inline: clamp(14px, 3vw, 32px); }
+.gateway-layout { width: min(1120px, 100%); }
+.gateway-flow-panel, .gateway-policy-panel { min-width: 0; }
+.payload-code { max-width: 100%; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.gateway-consent-row, .my-permission-row, .user-app-entry { gap: 10px; }
+.button-primary, .button-quiet, .consent-request-button, .consent-review-button, .consent-revoke-button { min-height: 40px; }
+.policy-panel { min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 210px minmax(0, 1fr); }
+  .sidebar { padding-inline: 14px; }
+  .main-area .page-content { padding-inline: 18px; }
+  .catalog-layout, .users-layout, .simulator-layout { grid-template-columns: minmax(0, 1fr); }
+  .policy-panel { border-top: 1px solid #dbe1da; }
+}
+@media (max-width: 640px) {
+  .app-shell { display: block; }
+  .sidebar { display: none; }
+  .topbar { min-height: 58px; padding: 8px 12px; }
+  .topbar-actions { gap: 6px; }
+  .prototype-banner { margin: 0; border-radius: 0; }
+  .main-area .page-content { padding: 16px 12px 24px; }
+  .page-heading { align-items: flex-start; gap: 12px; }
+  .page-heading h1 { font-size: clamp(26px, 8vw, 38px); }
+  .page-heading > .button-primary { width: 100%; justify-content: center; }
+  .public-topbar { min-height: 64px; }
+  .public-brand { width: 176px; height: 48px; }
+  .public-topbar-actions { gap: 5px; }
+  .admin-entry, .public-action { padding: 0 8px; font-size: 10px; }
+  .public-home { padding: 42px 18px 28px; }
+  .public-home-copy h1 { font-size: clamp(48px, 15vw, 78px); }
+  .public-home-card { box-shadow: 7px 7px 0 #1c0836; }
+  .public-home-cta { padding-top: 34px; }
+  .gateway-page { padding-top: 22px; }
+  .gateway-layout { gap: 12px; }
+  .public-shell .gateway-flow-panel, .public-shell .gateway-policy-panel { border-radius: 18px; padding: 18px 15px; }
+  .gateway-consent-row { grid-template-columns: auto minmax(0, 1fr); }
+  .gateway-consent-actions { grid-column: 2; justify-content: flex-start; }
+  .legal-step-actions { flex-direction: column-reverse; }
+}
+@media (max-width: 380px) {
+  .public-brand { width: 145px; }
+  .admin-entry { font-size: 9px; padding-inline: 6px; }
+  .public-home-features { gap: 16px; }
+  .public-home-card h2 { font-size: 28px; }
+}
+
 /* Plan 2027 public landing and centered gateway polish */
 .public-home { max-width: 1180px; margin: 0 auto; padding: 76px 5vw 40px; }
 .home-access-note { display: inline-flex; align-items: center; gap: 9px; color: #e7dcff; font-size: 12px; line-height: 1.5; }.home-access-note code { color: #fff; font: 700 11px "DM Mono", monospace; }
