@@ -26,6 +26,18 @@ function fail(res, status, code, message) {
   return res.status(status).json({ error: code, message })
 }
 
+function setSessionCookie(res, token) {
+  const attributes = [
+    `plid_v27=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=28800',
+  ]
+  if (process.env.NODE_ENV === 'production') attributes.push('Secure')
+  res.setHeader('Set-Cookie', attributes.join('; '))
+}
+
 function handleDbError(res, error) {
   if (error?.code === 'PGRST205' || error?.code === '42P01') {
     return fail(res, 503, 'SCHEMA_MIGRATION_REQUIRED', 'Falta aplicar la migración Supabase de PlacetaID v27.')
@@ -414,7 +426,7 @@ async function completeAuthorizedRequest(request, res) {
   const sessionToken = createRandomToken(32)
   const { error: sessionError } = await supabase.from('plid_v27_sessions').insert({ token_hash: hashToken(sessionToken), user_id: user.id, expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString() })
   if (sessionError) throw sessionError
-  res.cookie('plid_v27', sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 8 * 60 * 60 * 1000 })
+  setSessionCookie(res, sessionToken)
   return { stage: 'complete', login_correct: true, claims: { ...claims, email: undefined } }
 }
 
