@@ -278,6 +278,7 @@ function App() {
   const [gatewayUserId, setGatewayUserId] = useState('')
   const [gatewayError, setGatewayError] = useState('')
   const [gatewayOtp, setGatewayOtp] = useState('')
+  const [gatewayRequestId, setGatewayRequestId] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null)
@@ -431,13 +432,23 @@ function App() {
     showToast('Sesiones y dispositivos revocados')
   }
 
-  function submitGatewayDip(event: FormEvent<HTMLFormElement>) {
+  async function submitGatewayDip(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setGatewayError('')
     const dip = gatewayDip.replace(/[\s-]/g, '').toUpperCase()
     if (!/^\d{8}[A-Z]$/.test(dip)) {
       setGatewayError('Introduce el DIP completo: 8 números y una letra.')
       return
+    }
+    if (initialGatewayRequest.bound) {
+      if (!initialGatewayRequest.valid) { setGatewayError('La aplicación o redirect_uri no está autorizado.'); return }
+      try {
+        const params = new URLSearchParams(window.location.search)
+        const response = await fetch('/api/public/identify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dip, clientId: params.get('client_id') || params.get('clientId'), redirectUri: params.get('redirect_uri'), serviceKey: params.get('service') || params.get('service_key') || undefined, state: params.get('state') || undefined }) })
+        const payload = await response.json()
+        if (!response.ok) { setGatewayError(payload.message || 'No se pudo iniciar la autenticación.'); return }
+        setGatewayRequestId(payload.requestId)
+      } catch { setGatewayError('No se pudo contactar con el servicio de identidad.'); return }
     }
     const user = users.find((item) => item.dip === dip)
     if (!user) {
@@ -453,7 +464,7 @@ function App() {
     setGatewayStage('detected')
   }
 
-  function confirmGatewayIdentity() {
+  async function confirmGatewayIdentity() {
     if (!gatewayUser) return
     const method = authMethod(gatewayUser)
     if (!method) {
@@ -467,6 +478,25 @@ function App() {
     if (gatewayUser.status === 'suspended' || gatewayUser.status === 'closed') {
       setGatewayError(`La cuenta está ${userStatusLabel(gatewayUser.status).toLowerCase()}. Contacta con Administración.`)
       return
+    }
+    if (gatewayRequestId && method === 'authenticator') {
+      const response = await fetch('/api/public/authenticate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: gatewayRequestId, code: gatewayOtp }) })
+      const payload = await response.json()
+      if (!response.ok) { setGatewayError(payload.message || 'El código del Autentificador no es válido.'); return }
+      if (payload.stage === 'legal_required') { setGatewayStage('legal'); return }
+      if (payload.stage === 'complete') { setGatewayStage('authenticated'); return }
+      setGatewayError('La autenticación no se ha completado.'); return
+    }
+    if (gatewayRequestId && (method === 'mobile' || method === 'desktop')) {
+      setGatewayError('Aprueba la solicitud desde tu dispositivo vinculado…')
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000))
+        const response = await fetch(`/api/public/auth-requests/${encodeURIComponent(gatewayRequestId)}`)
+        const payload = await response.json()
+        if (payload.stage === 'complete') { setGatewayStage('authenticated'); setGatewayError(''); return }
+        if (payload.stage === 'denied') { setGatewayError('La solicitud fue rechazada en el dispositivo.'); return }
+      }
+      setGatewayError('La solicitud ha caducado o no fue aprobada.'); return
     }
     if (gatewayUser.legalAcceptedVersions?.includes(LEGAL_VERSION)) {
       finishGatewayAuthentication(gatewayUser, method)
