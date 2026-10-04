@@ -202,7 +202,7 @@
 
 /* Logo oficial sobre barra blanca */
 .public-topbar { background: #fff; border-bottom-color: #e5ddf2; }
-.public-brand { width: 255px; height: 58px; background: #fff url('/favi27plid.png') center / contain no-repeat; }
+.public-brand { width: 255px; height: 58px; background: #fff url('/plid27.png') center / contain no-repeat; }
 .public-brand > .brand-mark, .public-brand > span:last-child { display: none; }
 .public-topbar .public-action { color: #32105f; }
 @media (max-width: 600px) { .public-brand { width: 180px; height: 48px; } }
@@ -230,7 +230,7 @@
 .public-home-cta { display: flex; justify-content: space-between; align-items: center; padding: 58px 0 10px; }.public-home-cta h2 { margin-top: 12px; color: white; font: 400 42px Baruta, sans-serif; }
 .public-topbar { min-height: 78px; box-shadow: 0 8px 24px #14072955; }.public-topbar-actions { gap: 14px; }
 .public-topbar { background: #fff; border-bottom: 1px solid #e5ddf2; }
-.public-brand { width: 255px; height: 58px; border-radius: 10px; background: #fff url('/favi27plid.png') center / contain no-repeat; }
+.public-brand { width: 255px; height: 58px; border-radius: 10px; background: #fff url('/plid27.png') center / contain no-repeat; }
 .public-brand > .brand-mark, .public-brand > span:last-child { display: none; }
 .public-brand:focus-visible { outline-color: #5b21b6; }
 .gateway-page { display: flex; flex-direction: column; align-items: center; }.gateway-page > .page-heading, .gateway-page > .gateway-layout, .gateway-page > .gateway-privacy-footer { width: min(1120px, 100%); }.gateway-layout { margin-inline: auto; }
@@ -531,7 +531,7 @@
 
 /* Logo oficial sobre barra blanca */
 .public-topbar { background: #fff; border-bottom-color: #e5ddf2; }
-.public-brand { width: 255px; height: 58px; background: #fff url('/favi27plid.png') center / contain no-repeat; }
+.public-brand { width: 255px; height: 58px; background: #fff url('/plid27.png') center / contain no-repeat; }
 .public-brand > .brand-mark, .public-brand > span:last-child { display: none; }
 .public-topbar .public-action { color: #32105f; }
 @media (max-width: 600px) { .public-brand { width: 180px; height: 48px; } }
