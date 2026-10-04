@@ -440,6 +440,47 @@ api.get('/public/auth-requests/:id', async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+// PlacetaID móvil y Desktop confirman la solicitud usando el token secreto
+// del dispositivo previamente vinculado. La aplicación nunca recibe el DIP
+// ni puede aprobar una solicitud de otro usuario.
+api.post('/public/auth-requests/:id/approve', authLimiter, async (req, res) => {
+  const requestId = String(req.params.id || '')
+  const deviceToken = String(req.body?.deviceToken || '')
+  if (!requestId || !deviceToken) return fail(res, 400, 'DEVICE_TOKEN_REQUIRED', 'Se requiere el token del dispositivo.')
+  try {
+    const { data: request, error: requestError } = await supabase.from('plid_v27_auth_requests').select('id,user_id,method,status,expires_at').eq('id', requestId).maybeSingle()
+    if (requestError) throw requestError
+    if (!request || request.status !== 'pending' || Date.parse(request.expires_at) <= Date.now()) return fail(res, 410, 'REQUEST_EXPIRED', 'La solicitud ha caducado.')
+    if (!['mobile', 'desktop'].includes(request.method)) return fail(res, 409, 'METHOD_MISMATCH', 'Esta solicitud requiere el Autentificador.')
+    const { data: device, error: deviceError } = await supabase.from('plid_v27_devices').select('id,user_id,method,active,expires_at,revoked_at').eq('session_token_hash', hashToken(deviceToken)).eq('user_id', request.user_id).maybeSingle()
+    if (deviceError) throw deviceError
+    if (!device || device.method !== request.method || !device.active || device.revoked_at || Date.parse(device.expires_at) <= Date.now()) return fail(res, 401, 'INVALID_DEVICE', 'El dispositivo no está vinculado o ha caducado.')
+    const { data: updated, error: updateError } = await supabase.from('plid_v27_auth_requests').update({ status: 'authorized', completed_at: new Date().toISOString() }).eq('id', request.id).eq('status', 'pending').select('id,status,completed_at').maybeSingle()
+    if (updateError) throw updateError
+    if (!updated) return fail(res, 409, 'REQUEST_ALREADY_COMPLETED', 'La solicitud ya ha sido resuelta.')
+    await supabase.from('plid_v27_devices').update({ last_seen_at: new Date().toISOString() }).eq('id', device.id)
+    await supabase.from('plid_v27_audit').insert({ actor_user_id: request.user_id, target_user_id: request.user_id, event_type: 'device_authentication_approved', details: { method: request.method, request_id: request.id } })
+    res.json({ ok: true, status: 'authorized' })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/public/auth-requests/:id/deny', authLimiter, async (req, res) => {
+  const requestId = String(req.params.id || '')
+  const deviceToken = String(req.body?.deviceToken || '')
+  if (!requestId || !deviceToken) return fail(res, 400, 'DEVICE_TOKEN_REQUIRED', 'Se requiere el token del dispositivo.')
+  try {
+    const { data: request, error: requestError } = await supabase.from('plid_v27_auth_requests').select('id,user_id,method,status,expires_at').eq('id', requestId).maybeSingle()
+    if (requestError) throw requestError
+    const { data: device, error: deviceError } = await supabase.from('plid_v27_devices').select('id,method,active,expires_at,revoked_at').eq('session_token_hash', hashToken(deviceToken)).eq('user_id', request?.user_id).maybeSingle()
+    if (deviceError) throw deviceError
+    if (!request || !device || device.method !== request.method || !device.active || device.revoked_at || Date.parse(device.expires_at) <= Date.now()) return fail(res, 401, 'INVALID_DEVICE', 'El dispositivo no está vinculado o ha caducado.')
+    const { error: updateError } = await supabase.from('plid_v27_auth_requests').update({ status: 'denied', completed_at: new Date().toISOString() }).eq('id', request.id).eq('status', 'pending')
+    if (updateError) throw updateError
+    await supabase.from('plid_v27_audit').insert({ actor_user_id: request.user_id, target_user_id: request.user_id, event_type: 'device_authentication_denied', details: { method: request.method, request_id: request.id } })
+    res.json({ ok: true, status: 'denied' })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.post('/public/accept-legal', async (req, res) => {
   const requestId = String(req.body?.requestId || '')
   const accepted = req.body?.accepted === true
