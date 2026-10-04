@@ -202,6 +202,7 @@
 
 /* Plan 2027 public landing and centered gateway polish */
 .public-home { max-width: 1180px; margin: 0 auto; padding: 76px 5vw 40px; }
+.home-access-note { display: inline-flex; align-items: center; gap: 9px; color: #e7dcff; font-size: 12px; line-height: 1.5; }.home-access-note code { color: #fff; font: 700 11px "DM Mono", monospace; }
 .integration-endpoint-section { background: #f7f3ff; border: 1px solid #dfd2ef; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
 .endpoint-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; padding: 9px 11px; border-radius: 8px; background: #fff; }.endpoint-row .field-label { margin: 0; }.endpoint-row code, .field-help code { font: 11px "DM Mono", monospace; color: #5b21b6; word-break: break-all; }.redirect-uri-input { width: 100%; resize: vertical; border: 1px solid #cfc0e8; border-radius: 8px; background: #fff; padding: 10px; color: #27113f; font: 11px/1.55 "DM Mono", monospace; }.field-help { display: block; margin-top: 7px; color: #756388; font-size: 10px; line-height: 1.45; }
 .public-home-hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 70px; align-items: center; min-height: 560px; }

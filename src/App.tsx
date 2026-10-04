@@ -61,6 +61,7 @@ type Integration = {
   id: string
   clientId?: string
   redirectUris?: string[]
+  platforms?: string[]
   name: string
   category: string
   initials: string
@@ -191,11 +192,15 @@ function resolveGatewayRequest() {
   const app = initialIntegrations.find((item) => item.id === appParameter || item.clientId === appParameter)
   const serviceParameter = params.get('service') || params.get('service_key') || ''
   const service = app?.services.find((item) => item.id === serviceParameter || item.name.toLowerCase() === serviceParameter.toLowerCase())
+  const redirectUri = params.get('redirect_uri') || ''
+  const redirectAllowed = !clientId || Boolean(app?.redirectUris?.includes(redirectUri))
   return {
     appId: app?.id ?? 'joven',
     serviceId: service?.id ?? app?.services[0]?.id ?? 'ventajas',
     bound: Boolean(clientId || params.get('app')),
-    valid: !clientId && !params.get('app') ? true : Boolean(app),
+    valid: Boolean(clientId) && Boolean(app) && Boolean(redirectUri) && redirectAllowed,
+    redirectUri,
+    state: params.get('state') || '',
     appName: app?.name ?? '',
     serviceName: service?.name ?? '',
   }
@@ -252,7 +257,7 @@ function App() {
   const [audit, setAudit] = useState(() => readStored('plid27.v27.audit', initialAudit))
   const [users, setUsers] = useState(() => readStored('plid27.v27.users', initialUsers))
   const [selectedId, setSelectedId] = useState('banco')
-  const [view, setView] = useState<View>('home')
+  const [view, setView] = useState<View>(initialGatewayRequest.bound ? 'gateway' : 'home')
   const [query, setQuery] = useState('')
   const [userQuery, setUserQuery] = useState('')
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatus | 'all'>('all')
@@ -580,11 +585,11 @@ function App() {
 
         {view === 'home' && <div className="public-home">
           <section className="public-home-hero">
-            <div className="public-home-copy"><span className="public-kicker">IDENTIDAD DIGITAL · PLAN 2027</span><h1>Tu identidad.<br /><em>Tu decisión.</em></h1><p>PlacetaID permite entrar en los servicios de La Placeta sin compartir más datos de los necesarios.</p><div className="public-home-actions"><button className="public-home-primary" onClick={() => setView('gateway')}>Identificarme <ArrowRight size={16} /></button><button className="public-home-secondary" onClick={() => setView('myPermissions')}>Ver mis permisos</button></div></div>
+            <div className="public-home-copy"><span className="public-kicker">IDENTIDAD DIGITAL · PLAN 2027</span><h1>Tu identidad.<br /><em>Tu decisión.</em></h1><p>PlacetaID permite entrar en los servicios de La Placeta sin compartir más datos de los necesarios.</p><div className="public-home-actions"><span className="home-access-note"><LockKeyhole size={16} /> El acceso se inicia desde una aplicación autorizada mediante <code>client_id</code>.</span></div></div>
             <div className="public-home-card"><span className="home-card-icon"><Fingerprint size={25} /></span><span className="public-kicker">PLACETAID</span><h2>Acceso seguro<br />para todo el ecosistema.</h2><div className="home-card-line"><ShieldCheck size={16} /><span>Sin contraseñas compartidas</span></div><div className="home-card-line"><LockKeyhole size={16} /><span>Tú decides cada dato</span></div></div>
           </section>
           <section className="public-home-features"><div><span>01</span><h3>Identifícate</h3><p>Usa tu DIP y el método de acceso que tengas vinculado.</p></div><div><span>02</span><h3>Revisa</h3><p>Comprueba qué aplicación solicita el acceso y para qué servicio.</p></div><div><span>03</span><h3>Decide</h3><p>Concede o revoca datos protegidos cuando quieras.</p></div></section>
-          <section className="public-home-cta"><div><span className="public-kicker">CONTROL DEL TITULAR</span><h2>La identidad es tuya.</h2></div><button className="public-home-secondary" onClick={() => setView('gateway')}>Abrir pasarela <ArrowRight size={15} /></button></section>
+          <section className="public-home-cta"><div><span className="public-kicker">CONTROL DEL TITULAR</span><h2>La identidad es tuya.</h2></div><span className="home-access-note"><LockKeyhole size={15} /> Inicio delegado por la aplicación solicitante</span></section>
         </div>}
 
         {view === 'applications' && (
@@ -621,7 +626,7 @@ function App() {
               </div>
 
               {selected && <aside className="policy-panel">
-                <div className="policy-section integration-endpoint-section"><div className="policy-section-heading"><div><h3>Endpoint de la aplicación</h3><p>URL exacta para iniciar PlacetaID</p></div><Code2 size={16} /></div><div className="endpoint-row"><span className="field-label">Client ID</span><code>{selected.clientId ?? 'Pendiente de registrar'}</code></div><label className="field-label" htmlFor="redirect-uris">Redirect URIs permitidas</label><textarea id="redirect-uris" className="redirect-uri-input" rows={3} value={(selected.redirectUris ?? []).join('\n')} placeholder="https://app.ejemplo.org/placetaid/callback" onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, redirectUris: event.target.value.split(/\n|,/).map((uri) => uri.trim()).filter(Boolean), updated: 'Ahora' }))} /><small className="field-help">Debe coincidir exactamente con el parámetro <code>redirect_uri</code>, incluido protocolo, dominio, puerto y ruta.</small></div>
+                <div className="policy-section integration-endpoint-section"><div className="policy-section-heading"><div><h3>Endpoint de la aplicación</h3><p>URL exacta para iniciar PlacetaID</p></div><Code2 size={16} /></div><div className="endpoint-row"><span className="field-label">Client ID</span><code>{selected.clientId ?? 'Pendiente de registrar'}</code></div><label className="field-label" htmlFor="redirect-uris">Redirect URIs permitidas</label><textarea id="redirect-uris" className="redirect-uri-input" rows={3} value={(selected.redirectUris ?? []).join('\n')} placeholder="https://app.ejemplo.org/placetaid/callback" onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, redirectUris: event.target.value.split(/\n|,/).map((uri) => uri.trim()).filter(Boolean), updated: 'Ahora' }))} /><small className="field-help">Debe coincidir exactamente con el parámetro <code>redirect_uri</code>, incluido protocolo, dominio, puerto y ruta.</small><label className="field-label" htmlFor="platforms">Plataformas compatibles</label><input id="platforms" className="redirect-uri-input" value={(selected.platforms ?? ['Web', 'Apple', 'Android', 'Chrome Extension', 'Windows Desktop']).join(', ')} onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, platforms: event.target.value.split(',').map((platform) => platform.trim()).filter(Boolean), updated: 'Ahora' }))} /><small className="field-help">Usa el mismo client_id para el ecosistema de la aplicación y registra callbacks específicos por plataforma.</small></div>
                 <div className="policy-topline"><span className="eyebrow">FICHA DE INTEGRACIÓN</span><button className="more-button" aria-label="Más opciones" onClick={() => showToast('No hay más acciones disponibles en la vista previa')}><span /><span /><span /></button></div>
                 <div className="policy-app-heading"><span className={`app-mark app-mark-large app-mark-${selected.color}`}>{selected.initials}</span><div><h2>{selected.name}</h2><span>{selected.category} <span className="separator-dot">·</span> ID {selected.id.toUpperCase()}</span></div></div>
                 <div className="authorization-row"><div><strong>{selected.status === 'authorized' ? 'Integración autorizada' : selected.status === 'pending' ? 'Solicitud pendiente' : 'Integración desactivada'}</strong><small>{selected.status === 'authorized' ? 'Puede iniciar el flujo de acceso' : selected.status === 'pending' ? 'Aún no puede iniciar sesión' : 'El acceso está bloqueado para todos'}</small></div><button className={`switch ${selected.status === 'authorized' ? 'switch-on' : ''}`} role="switch" aria-checked={selected.status === 'authorized'} aria-label="Autorizar aplicación" onClick={() => toggleStatus(selected)}><span /></button></div>
