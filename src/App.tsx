@@ -62,6 +62,7 @@ type Integration = {
   clientId?: string
   redirectUris?: string[]
   platforms?: string[]
+  description?: string
   name: string
   category: string
   initials: string
@@ -283,10 +284,34 @@ function App() {
   const [gatewayAppId, setGatewayAppId] = useState(initialGatewayRequest.appId)
   const [gatewayServiceId, setGatewayServiceId] = useState(initialGatewayRequest.serviceId)
   const [consentPrompt, setConsentPrompt] = useState<{ userId: string; appId: string; field: ProtectedField } | null>(null)
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('plid27.adminToken') || '')
+  const [adminSyncing, setAdminSyncing] = useState(false)
 
   useEffect(() => localStorage.setItem('plid27.v27.integrations', JSON.stringify(integrations)), [integrations])
   useEffect(() => localStorage.setItem('plid27.v27.audit', JSON.stringify(audit)), [audit])
   useEffect(() => localStorage.setItem('plid27.v27.users', JSON.stringify(users)), [users])
+  useEffect(() => {
+    if (view !== 'applications' || adminSyncing) return
+    async function loadAdminCatalog() {
+      let token = adminToken
+      if (!token) {
+        const key = window.prompt('Clave de Administración PlacetaID') || ''
+        if (!key) { setView('home'); return }
+        const session = await fetch('/api/admin/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) })
+        if (!session.ok) { showToast('No se pudo iniciar la sesión de Administración'); setView('home'); return }
+        token = (await session.json()).token
+        setAdminToken(token)
+        localStorage.setItem('plid27.adminToken', token)
+      }
+      setAdminSyncing(true)
+      const response = await fetch('/api/admin/apps', { headers: { Authorization: `Bearer ${token}` } })
+      if (response.ok) setIntegrations(await response.json())
+      else if (response.status === 401) { localStorage.removeItem('plid27.adminToken'); setAdminToken(''); showToast('La sesión de Administración ha caducado') }
+      else showToast('No se pudo cargar el catálogo desde Supabase')
+      setAdminSyncing(false)
+    }
+    void loadAdminCatalog().catch(() => { setAdminSyncing(false); showToast('API de Administración no disponible') })
+  }, [view])
 
   const selected = integrations.find((item) => item.id === selectedId) ?? integrations[0]
   const visibleIntegrations = useMemo(() => integrations.filter((item) => {
@@ -325,7 +350,12 @@ function App() {
   }
 
   function updateIntegration(id: string, update: (item: Integration) => Integration) {
-    setIntegrations((current) => current.map((item) => item.id === id ? update(item) : item))
+    setIntegrations((current) => {
+      const next = current.map((item) => item.id === id ? update(item) : item)
+      const changed = next.find((item) => item.id === id)
+      if (changed && adminToken) void fetch(`/api/admin/apps/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` }, body: JSON.stringify({ name: changed.name, description: changed.description || '', category: changed.category, redirect_uris: changed.redirectUris || [], status: changed.status, min_age: changed.minAge, allowed_roles: changed.roles, scopes: changed.scopes }) })
+      return next
+    })
   }
 
   function updateUser(id: string, update: (user: ManagedUser) => ManagedUser) {
