@@ -3,7 +3,7 @@ import dotenv from 'dotenv'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 
-if ((!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) && process.env.NODE_ENV !== 'production') {
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
   dotenv.config({ path: process.env.PLID27_ENV_FILE || path.resolve(process.cwd(), '../rsp-web/server/.env') })
 }
 
