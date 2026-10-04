@@ -312,7 +312,7 @@ function App() {
       setAdminSyncing(false)
     }
     void loadAdminCatalog().catch(() => { setAdminSyncing(false); showToast('API de Administración no disponible') })
-  }, [view])
+  }, [view, adminToken])
 
   const selected = integrations.find((item) => item.id === selectedId) ?? integrations[0]
   const visibleIntegrations = useMemo(() => integrations.filter((item) => {

@@ -263,6 +263,23 @@ button { min-height: 38px; }
   .public-home-card h2 { font-size: 28px; }
 }
 
+/* Legibilidad mínima: ningún texto funcional debe quedar en tamaño de etiqueta. */
+.public-shell p, .public-shell small, .public-shell label, .public-shell button { font-size: max(12px, 0.78rem); }
+.public-shell .public-kicker, .public-shell .eyebrow { font-size: 11px; }
+.public-shell .gateway-step-heading h2, .public-shell .gateway-policy-panel h2 { font-size: clamp(18px, 2vw, 24px); }
+.public-shell .gateway-step-heading p, .public-shell .gateway-policy-panel p { font-size: 13px; }
+.public-shell .legal-document-links strong, .public-shell .legal-document-links small { font-size: 12px; }
+.public-shell .legal-accept-option { font-size: 12px; }
+.public-shell .legal-version-note { font-size: 10px; }
+.public-shell .gateway-privacy-footer, .public-shell .public-footer { font-size: 11px; }
+.public-shell .public-home-features p { font-size: 13px; }
+.public-shell .public-home-card h2 { font-size: clamp(28px, 4vw, 40px); }
+@media (max-width: 640px) {
+  .public-shell p, .public-shell small, .public-shell label, .public-shell button { font-size: 12px; }
+  .public-shell .gateway-step-heading p, .public-shell .gateway-policy-panel p { font-size: 12px; }
+  .public-shell .admin-entry, .public-shell .public-action { font-size: 11px; }
+}
+
 /* Plan 2027 public landing and centered gateway polish */
 .public-home { max-width: 1180px; margin: 0 auto; padding: 76px 5vw 40px; }
 .home-access-note { display: inline-flex; align-items: center; gap: 9px; color: #e7dcff; font-size: 12px; line-height: 1.5; }.home-access-note code { color: #fff; font: 700 11px "DM Mono", monospace; }
