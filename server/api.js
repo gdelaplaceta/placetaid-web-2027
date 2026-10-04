@@ -147,7 +147,7 @@ api.get('/health', async (_req, res) => {
 })
 
 api.post('/admin/session', authLimiter, (req, res) => {
-  const expected = process.env.PLACETAID_V27_ADMIN_KEY || process.env.PLACETAID_ADMIN_KEY || ''
+  const expected = process.env.PLACETAID_V27_ADMIN_KEY || process.env.PLACETAID_ADMIN_KEY || process.env.ADMIN_PASSWORD || ''
   const supplied = String(req.body?.key || '')
   if (!expected) return fail(res, 503, 'ADMIN_AUTH_NOT_CONFIGURED', 'Configura PLACETAID_V27_ADMIN_KEY en el servidor.')
   if (!secureEquals(expected, supplied)) return fail(res, 401, 'INVALID_ADMIN_KEY', 'La clave de Administración no es válida.')
