@@ -1273,3 +1273,77 @@ button { min-height: 38px; }
   .public-shell .gateway-identified .text-action { font-size: 10px; }
   .public-shell .gateway-steps-list > div { min-height: 66px; }
 }
+
+@media (max-width: 600px) {
+  .public-shell:has(.gateway-page-bound), .public-shell:has(.gateway-page-bound) .public-main { min-height: 100svh; }
+  .public-shell:has(.gateway-page-bound) .public-main { display: block; overflow-x: hidden; overflow-y: auto; }
+  .public-shell:has(.gateway-page-bound) .public-footer { display: none; }
+  .public-shell:has(.gateway-page-bound) .public-topbar { min-height: 48px; height: 48px; padding: 4px 10px; }
+  .public-shell:has(.gateway-page-bound) .public-brand-pair { position: static; gap: 5px; transform: none; }
+  .public-shell:has(.gateway-page-bound) .public-brand-pair .public-brand,
+  .public-shell:has(.gateway-page-bound) .public-requesting-app-logo { width: 74px; height: 28px; flex-basis: 74px; }
+  .public-shell:has(.gateway-page-bound) .public-brand-arrow svg { width: 12px; height: 12px; }
+  .public-shell:has(.gateway-page-bound) .public-topbar-actions .admin-entry { display: none; }
+  .public-shell .page-content.gateway-page { width: calc(100% - 20px); padding: 8px 0 10px; }
+  .public-shell .gateway-page > .page-heading { display: none; }
+  .public-shell .gateway-page.gateway-page-bound { min-height: 0; align-content: start; align-items: stretch; gap: 8px; }
+  .public-shell .gateway-request-card { margin-bottom: 8px; border-radius: 12px; }
+  .public-shell .gateway-request-heading { min-height: 0; gap: 9px; padding: 9px 11px; }
+  .public-shell .gateway-app-mark { width: 34px; height: 34px; flex-basis: 34px; border-radius: 8px; }
+  .public-shell .gateway-app-copy { gap: 2px; }
+  .public-shell .gateway-verified-label { display: none; }
+  .public-shell .gateway-app-copy h2 { font-size: 12px; line-height: 1.25; }
+  .public-shell .gateway-app-copy p, .public-shell .gateway-request-badge { display: none; }
+  .public-shell .gateway-request-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+  .public-shell .gateway-request-section { min-height: 0; padding: 7px 9px; border-right: 0; }
+  .public-shell .gateway-request-section:nth-child(2n) { border-right: 0; }
+  .public-shell .gateway-request-section:nth-child(3) { grid-column: 1 / -1; }
+  .public-shell .gateway-section-label { font-size: 9px; letter-spacing: .25px; }
+  .public-shell .gateway-request-section > strong { font-size: 11px; line-height: 1.3; }
+  .public-shell .gateway-request-section > p, .public-shell .gateway-destination,
+  .public-shell .gateway-requirements li:not(:first-child) { display: none; }
+  .public-shell .gateway-requirements { gap: 2px; margin-top: 4px; }
+  .public-shell .gateway-requirements li { gap: 4px; font-size: 9px; }
+  .public-shell .gateway-requirements li svg { width: 11px; height: 11px; }
+  .public-shell .gateway-disclosure-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 6px; margin-top: 4px; }
+  .public-shell .gateway-disclosure-list li { gap: 3px; font-size: 9px; line-height: 1.25; }
+  .public-shell .gateway-disclosure-list li svg { width: 10px; height: 10px; flex: 0 0 10px; }
+  .public-shell .gateway-disclosure-list li small { margin-left: 0; font-size: 8px; }
+  .public-shell .gateway-data-footnote { display: none; }
+  .public-shell .gateway-layout { grid-template-columns: minmax(0, 1fr); border-radius: 12px; }
+  .public-shell .gateway-flow-panel { padding: 10px 12px; border: 0; border-radius: 12px; }
+  .public-shell .gateway-policy-panel, .public-shell .gateway-privacy-footer { display: none; }
+  .public-shell .gateway-wordmark-row, .public-shell .gateway-tagline { display: none; }
+  .public-shell .gateway-flow-panel > .gateway-step-heading { gap: 7px; margin: 0 0 5px; }
+  .public-shell .gateway-flow-panel > .gateway-step-heading .step-number { width: 23px; height: 23px; flex-basis: 23px; border-radius: 7px; font-size: 9px; }
+  .public-shell .gateway-flow-panel .gateway-step-heading h2 { margin: 0 0 2px; font-size: 14px; }
+  .public-shell .gateway-step-heading p { font-size: 10px; line-height: 1.25; }
+  .public-shell .gateway-form { margin: 4px 0 0; }
+  .public-shell .gateway-form > .gateway-step-heading { margin-bottom: 7px; }
+  .public-shell .gateway-field-label, .public-shell .field-label { margin: 6px 0 4px; font-size: 10px; }
+  .public-shell .gateway-dip-input, .public-shell .gateway-password-input { height: 40px; min-height: 40px; padding: 0 10px; border-radius: 8px; font-size: 15px; }
+  .public-shell .gateway-input-note { gap: 5px; margin-top: 5px; font-size: 9px; line-height: 1.25; }
+  .public-shell .gateway-input-note svg { width: 12px; height: 12px; flex-basis: 12px; margin: 0; }
+  .public-shell .gateway-continue { min-height: 40px; margin-top: 8px; border-radius: 8px; font-size: 11px; }
+  .public-shell .gateway-error { margin: 6px 0; padding: 7px 9px; border-radius: 7px; font-size: 10px; line-height: 1.35; }
+  .public-shell .gateway-enrollment-help { gap: 6px; margin-top: 6px; padding: 8px; font-size: 9px; }
+  .public-shell .method-detection { margin-top: 6px; padding-top: 6px; }
+  .public-shell .gateway-identified { min-height: 48px; gap: 7px; padding: 6px; }
+  .public-shell .gateway-identified .user-avatar { width: 30px; height: 30px; flex-basis: 30px; }
+  .public-shell .gateway-identified > div strong { font-size: 10px; }
+  .public-shell .gateway-identified > div small { font-size: 8px; }
+  .public-shell .priority-method { min-height: 42px; padding: 5px; }
+  .public-shell .priority-method-icon { width: 28px; height: 28px; flex-basis: 28px; }
+  .public-shell .priority-method strong { font-size: 10px; }
+  .public-shell .priority-method small { font-size: 8px; }
+  .public-shell .gateway-confirmation-code { gap: 6px; margin-top: 6px; padding: 8px; }
+  .public-shell .gateway-confirmation-code > div strong { font-size: 20px; }
+  .public-shell .gateway-confirmation-code p { font-size: 9px; line-height: 1.3; }
+  .public-shell .gateway-password-link { margin-top: 5px; font-size: 9px; }
+  .public-shell .gateway-password-temporary-note { margin-top: 4px; font-size: 8px; }
+  .public-shell .legal-consent-step .legal-document-links { gap: 5px; margin-top: 6px; }
+  .public-shell .legal-consent-step .legal-document-links > button { min-height: 42px; padding: 6px; }
+  .public-shell .legal-accept-option { margin-top: 6px; font-size: 9px; }
+  .public-shell .legal-step-actions { gap: 6px; margin-top: 8px; }
+  .public-shell .legal-step-actions button { min-height: 36px; font-size: 10px; }
+}

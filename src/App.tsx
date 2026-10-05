@@ -298,6 +298,8 @@ function gatewayClaimLabel(field: string) {
     over_18: 'Indicador: mayor de 18',
     name: 'Nombre',
     surname: 'Apellidos',
+    identity_verified: 'Identidad verificada',
+    identityVerified: 'Identidad verificada',
   }
   return labels[field] ?? field
 }
