@@ -30,6 +30,9 @@ const migrationTables = [
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false })
 const deviceEnrollmentLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false })
 const deviceLifetimeMs = 365 * 24 * 60 * 60 * 1000
+const shareableConsentFields = ['dip', 'email', 'identityVerified']
+const unavailableConsentFields = ['phone', 'photo']
+const baseDisclosureFields = ['login_correct', 'over_16', 'over_18', 'name', 'surname']
 
 function fail(res, status, code, message) {
   return res.status(status).json({ error: code, message })
@@ -697,7 +700,19 @@ api.post('/public/identify', authLimiter, async (req, res) => {
       status: 'pending',
     }).select('id,method,expires_at').single()
     if (requestError) throw requestError
-    res.status(201).json({ requestId: request.id, method: request.method, expiresAt: request.expires_at, app: app ? { name: app.name } : null, service: service ? { name: service.name } : null })
+    res.status(201).json({
+      requestId: request.id,
+      method: request.method,
+      expiresAt: request.expires_at,
+      app: app ? { name: app.name } : null,
+      service: service ? { name: service.name } : null,
+      disclosure: {
+        base: baseDisclosureFields,
+        optional: shareableConsentFields.filter((field) => app?.scopes?.[field]),
+        unavailable: unavailableConsentFields.filter((field) => app?.scopes?.[field]),
+        destination: app ? req.body.redirectUri : null,
+      },
+    })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -752,7 +767,7 @@ async function completeAuthorizedRequest(request, res) {
     if (override?.decision === 'deny' || !app.allowed_roles.includes(user.rol) || (Array.isArray(roles) && !roles.includes(user.rol)) || (age !== null && age < requiredAge)) return { stage: 'denied', reason: 'ACCESS_POLICY', login_correct: false }
     if (status === 'restricted') return { stage: 'denied', reason: 'ACCOUNT_RESTRICTED', login_correct: false }
 
-    const protectedFields = ['dip', 'email', 'phone', 'photo', 'identityVerified'].filter((field) => app.scopes?.[field])
+    const protectedFields = shareableConsentFields.filter((field) => app.scopes?.[field])
     if (protectedFields.length) {
       const { data: consents, error: consentError } = await supabase.from('plid_v27_consents').select('field,status').eq('user_id', user.id).eq('app_id', app.id)
       if (consentError) throw consentError
@@ -922,6 +937,9 @@ api.patch('/public/session/consents', requireUserSession, async (req, res) => {
   if (!appId || !['dip', 'email', 'phone', 'photo', 'identityVerified'].includes(field) || !['granted', 'denied', 'revoked'].includes(decision)) {
     return fail(res, 400, 'INVALID_CONSENT', 'La decisión de consentimiento no es válida.')
   }
+  if (decision === 'granted' && !shareableConsentFields.includes(field)) {
+    return fail(res, 409, 'FIELD_NOT_AVAILABLE', 'Este dato no está disponible para compartir en PlacetaID v27.')
+  }
   try {
     const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
       .select('id,name,status,scopes')
@@ -1017,7 +1035,7 @@ api.post('/public/consents', async (req, res) => {
   const requestId = String(req.body?.requestId || '')
   const field = String(req.body?.field || '')
   const decision = req.body?.decision === 'granted' ? 'granted' : req.body?.decision === 'denied' ? 'denied' : ''
-  if (!requestId || !['dip', 'email', 'phone', 'photo', 'identityVerified'].includes(field) || !decision) return fail(res, 400, 'INVALID_CONSENT', 'La decisión de consentimiento no es válida.')
+  if (!requestId || !shareableConsentFields.includes(field) || !decision) return fail(res, 400, 'INVALID_CONSENT', 'La decisión de consentimiento no es válida.')
   try {
     const { data: request, error } = await supabase.from('plid_v27_auth_requests').select('*').eq('id', requestId).maybeSingle()
     if (error) throw error

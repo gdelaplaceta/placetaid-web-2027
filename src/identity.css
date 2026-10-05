@@ -533,6 +533,7 @@ button { min-height: 38px; }
 .data-policy-control > span { font-size: 6px; }
 .data-policy-control select { width: 68px; height: 100%; appearance: none; padding-right: 13px; border: 0; outline: 0; background: transparent; color: #50396a; font-size: 7px; cursor: pointer; }
 .data-policy-control svg { position: absolute; right: 5px; pointer-events: none; }
+.data-policy-unavailable { padding: 6px 8px; border: 1px solid #e0d5e8; border-radius: 7px; background: #f4eff6; color: #806f89; font-size: 7px; white-space: nowrap; }
 .scope-row { gap: 7px; }
 .scope-row .scope-copy { flex: 1; }
 .scope-row .scope-copy strong { font-size: 7px; }
@@ -692,8 +693,18 @@ button { min-height: 38px; }
 .legal-document-modal h2 { margin: 10px 0; color: #1c0836; font: 900 23px/1.15 'Baruta', 'Plus Jakarta Sans', sans-serif; }
 .legal-document-copy h3 { margin: 15px 0 5px; color: #4c1d95; font-size: 10px; }
 .legal-document-copy p { margin: 0; color: #5d4a72; font-size: 9px; line-height: 1.7; }
-.legal-draft-note { margin-top: 16px; padding: 9px; border: 1px solid #decce9; border-radius: 9px; background: #f8f4ff; color: #806e95; font-size: 8px; }
 .legal-document-close { width: 100%; justify-content: center; margin-top: 13px; border-radius: 999px; }
+.gateway-disclosure { display: flex; flex-direction: column; gap: 9px; margin-top: 17px; padding: 13px; border: 1px solid #d8c8eb; border-radius: 8px; background: #f8f4ff; }
+.gateway-disclosure-destination { display: flex; flex-direction: column; gap: 4px; padding-bottom: 9px; border-bottom: 1px solid #e5daef; }
+.gateway-disclosure-destination strong, .gateway-disclosure h3 { margin: 0; color: #493260; font-size: 9px; }
+.gateway-disclosure-destination span { overflow-wrap: anywhere; color: #715d88; font: 8px/1.5 'DM Mono', monospace; }
+.gateway-disclosure h3 { margin-top: 3px; }
+.gateway-disclosure ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.gateway-disclosure li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: #59466e; font-size: 8px; }
+.gateway-disclosure li svg { flex: 0 0 auto; color: #6d28d9; }
+.gateway-disclosure li small { margin-left: auto; color: #867393; font-size: 7px; }
+.gateway-disclosure-empty, .gateway-disclosure-note { margin: 0; color: #78668e; font-size: 8px; line-height: 1.6; }
+.gateway-disclosure-note { padding-top: 8px; border-top: 1px solid #e5daef; }
 
 .floating-plan-button { position: fixed; z-index: 12; right: 20px; bottom: 20px; min-height: 53px; display: flex; align-items: center; gap: 9px; padding: 6px 11px 6px 7px; border: 2px solid #c4b5fd; border-radius: 999px; background: #1c0836; color: #fff; box-shadow: 4px 4px 0 #8b5cf6; cursor: pointer; transition: transform .18s; }
 .floating-plan-button:hover { transform: translateY(-3px); }
