@@ -1168,3 +1168,108 @@ button { min-height: 38px; }
   .admin-password-modal { padding: 20px; }
   .user-security-actions > div { flex-basis: 100%; }
 }
+
+.public-shell, .public-main { background: #f5f4f8; color: #24133a; }
+.public-topbar { position: sticky; top: 0; z-index: 10; min-height: 76px; padding-inline: max(24px, calc((100vw - 1180px) / 2)); box-shadow: 0 3px 16px #24133a0b; }
+.public-shell .page-content.gateway-page { width: min(1180px, calc(100% - 48px)); max-width: none; padding: 32px 0 26px; }
+.public-shell .gateway-page > .page-heading { align-items: center; margin-bottom: 21px; }
+.public-shell .gateway-page > .page-heading h1 { color: #24133a; font-size: clamp(25px, 3vw, 34px); letter-spacing: -.7px; }
+.public-shell .gateway-page > .page-heading p { max-width: 620px; color: #71677d; font-size: 14px; line-height: 1.65; }
+.public-shell .gateway-request-card { width: 100%; margin-bottom: 20px; border: 1px solid #e5dfed; border-radius: 18px; background: #fff; box-shadow: 0 10px 36px #21133c0b; }
+.public-shell .gateway-request-heading { min-height: 106px; gap: 16px; padding: 22px 25px; }
+.public-shell .gateway-app-mark { width: 58px; height: 58px; flex-basis: 58px; border-radius: 14px; }
+.public-shell .gateway-app-copy { gap: 5px; }
+.public-shell .gateway-verified-label { font-size: 10px; letter-spacing: .45px; }
+.public-shell .gateway-app-copy h2 { color: #28173e; font-size: 20px; letter-spacing: -.2px; }
+.public-shell .gateway-app-copy p { color: #776e82; font-size: 12px; }
+.public-shell .gateway-request-badge { min-height: 31px; padding: 0 11px; border: 1px solid #d8c9ec; border-radius: 999px; background: #f6f1fc; color: #64418f; font-size: 10px; }
+.public-shell .gateway-request-section { min-height: 150px; padding: 19px 22px; border-color: #eee9f3; }
+.public-shell .gateway-section-label { color: #80758f; font-size: 10px; letter-spacing: .55px; }
+.public-shell .gateway-request-section > strong { color: #302143; font-size: 14px; }
+.public-shell .gateway-request-section > p, .public-shell .gateway-destination > span { color: #766b81; font-size: 11px; line-height: 1.6; }
+.public-shell .gateway-requirements, .public-shell .gateway-disclosure-list { gap: 9px; }
+.public-shell .gateway-requirements li, .public-shell .gateway-disclosure-list li { color: #493d59; font-size: 11px; line-height: 1.45; }
+.public-shell .gateway-requirements li svg, .public-shell .gateway-disclosure-list li svg { width: 15px; height: 15px; }
+.public-shell .gateway-disclosure-list li small { font-size: 10px; }
+.public-shell .gateway-data-footnote { margin-top: 12px !important; font-size: 10px !important; }
+.public-shell .gateway-destination code { padding: 5px 8px; border: 1px solid #e7e1ed; border-radius: 6px; background: #f8f6fa; font-size: 11px; }
+.public-shell .gateway-layout { grid-template-columns: minmax(0, 1.03fr) minmax(0, .97fr); gap: 0; border-color: #e4dced; border-radius: 18px; background: #fff; box-shadow: 0 12px 42px #24133a0d; }
+.public-shell .gateway-flow-panel, .public-shell .gateway-policy-panel { min-height: 100%; padding: 28px 30px; }
+.public-shell .gateway-flow-panel { border-right: 1px solid #ede8f2; border-radius: 18px 0 0 18px; }
+.public-shell .gateway-policy-panel { border-radius: 0 18px 18px 0; background: #fcfbfd; }
+.public-shell .gateway-wordmark-row { margin: 0; }
+.public-shell .gateway-wordmark { color: #2b1743; font-size: 30px; letter-spacing: -1px; }
+.public-shell .gateway-tagline { margin: 3px 0 25px; color: #786e83; font-size: 12px; }
+.public-shell .gateway-step-heading { gap: 12px; margin-bottom: 18px; }
+.public-shell .gateway-step-heading .step-number { width: 31px; height: 31px; flex-basis: 31px; border-radius: 10px; font-size: 12px; }
+.public-shell .gateway-step-heading h2, .public-shell .gateway-policy-panel h2 { color: #28183c; font-size: 18px; letter-spacing: -.2px; }
+.public-shell .gateway-step-heading p, .public-shell .gateway-policy-panel p { color: #756b80; font-size: 12px; line-height: 1.6; }
+.public-shell .gateway-form { max-width: none; margin: 20px 0 8px; }
+.public-shell .field-label { margin: 15px 0 8px; color: #41334f; font-size: 12px; font-weight: 700; }
+.public-shell .gateway-dip-input, .public-shell .gateway-password-input, .public-shell .gateway-otp-input { width: 100%; min-height: 52px; height: 52px; padding: 0 15px; border: 1px solid #d9d1e2; border-radius: 10px; background: #fff; color: #28183c; font-size: 17px; }
+.public-shell .gateway-dip-input:focus, .public-shell .gateway-password-input:focus, .public-shell .gateway-otp-input:focus { border-color: #8853c7; box-shadow: 0 0 0 4px #8853c71a; }
+.public-shell .gateway-input-note { align-items: flex-start; gap: 8px; margin-top: 10px; color: #786f83; font-size: 11px; line-height: 1.55; }
+.public-shell .gateway-input-note svg { flex: 0 0 15px; margin-top: 1px; }
+.public-shell .gateway-continue { width: 100%; min-height: 48px; justify-content: center; gap: 9px; margin-top: 20px; font-size: 13px; font-weight: 750; }
+.public-shell .gateway-error { margin: 12px 0; padding: 11px 12px; border: 1px solid #f0c9cb; border-radius: 9px; background: #fff6f6; color: #9b3444; font-size: 12px; line-height: 1.55; }
+.public-shell .gateway-enrollment-help { padding: 14px; border-radius: 10px; font-size: 12px; }
+.public-shell .gateway-password-link { margin-top: 13px; padding: 7px 0; color: #69429b; font-size: 12px; font-weight: 700; text-align: left; }
+.public-shell .gateway-password-temporary-note { display: block; margin-top: 11px; color: #84798e; font-size: 10px; line-height: 1.5; }
+.public-shell .gateway-identified, .public-shell .gateway-authenticated { min-height: 75px; gap: 13px; padding: 13px; border-radius: 11px; }
+.public-shell .gateway-identified > div strong, .public-shell .gateway-authenticated > div strong { font-size: 13px; }
+.public-shell .gateway-identified > div small, .public-shell .gateway-authenticated > div small { font-size: 11px; }
+.public-shell .method-detection { margin-top: 21px; padding-top: 20px; }
+.public-shell .priority-method { min-height: 61px; gap: 12px; padding: 10px; border-radius: 9px; }
+.public-shell .priority-method-icon { width: 36px; height: 36px; flex-basis: 36px; border-radius: 9px; }
+.public-shell .priority-method strong { font-size: 12px; }
+.public-shell .priority-method small { font-size: 10px; }
+.public-shell .priority-method-state { font-size: 9px; }
+.public-shell .gateway-confirmation-code { gap: 18px; margin-top: 14px; padding: 15px; border-radius: 11px; }
+.public-shell .gateway-confirmation-code > div strong { font-size: 26px; letter-spacing: 3px; }
+.public-shell .gateway-confirmation-code p { font-size: 11px; line-height: 1.55; }
+.public-shell .gateway-otp-input { width: 190px; text-align: center; letter-spacing: 6px; }
+.public-shell .gateway-policy-panel > .gateway-step-heading { margin-bottom: 21px; }
+.public-shell .gateway-steps-list { display: grid; gap: 2px; }
+.public-shell .gateway-steps-list > div { min-height: 70px; gap: 13px; padding: 12px 10px; }
+.public-shell .gateway-steps-list > div > span { width: 29px; height: 29px; flex-basis: 29px; border-radius: 9px; font-size: 11px; }
+.public-shell .gateway-steps-list > div strong { color: #39294b; font-size: 12px; }
+.public-shell .gateway-steps-list > div small { color: #7e7488; font-size: 10px; line-height: 1.5; }
+.public-shell .gateway-compatibility { margin-top: 18px; padding: 15px; border: 1px solid #e9e3ef; border-radius: 12px; background: #fff; }
+.public-shell .gateway-compatibility-heading { gap: 8px; margin-bottom: 9px; color: #60418a; }
+.public-shell .gateway-compatibility-heading strong { font-size: 12px; }
+.public-shell .gateway-compatibility ul { gap: 9px; }
+.public-shell .gateway-compatibility li { gap: 10px; }
+.public-shell .gateway-compatibility li > svg { width: 17px; height: 17px; }
+.public-shell .gateway-compatibility li strong { color: #443652; font-size: 11px; }
+.public-shell .gateway-compatibility li small, .public-shell .gateway-compatibility > p { color: #7a7083; font-size: 10px; line-height: 1.5; }
+.public-shell .gateway-response { margin-top: 17px; }
+.public-shell .gateway-privacy-footer { width: min(1180px, 100%); gap: 9px; margin: 0 auto; padding: 10px 0 4px; color: #746a80; font-size: 11px; line-height: 1.5; }
+.public-shell .gateway-privacy-footer svg { flex: 0 0 15px; }
+
+@media (max-width: 900px) {
+  .public-shell .gateway-layout { grid-template-columns: minmax(0, 1fr); }
+  .public-shell .gateway-flow-panel { border-right: 0; border-bottom: 1px solid #ede8f2; border-radius: 18px 18px 0 0; }
+  .public-shell .gateway-policy-panel { border-radius: 0 0 18px 18px; }
+}
+@media (max-width: 760px) {
+  .public-topbar { min-height: 62px; padding: 7px 14px; }
+  .public-shell .page-content.gateway-page { width: calc(100% - 28px); padding: 22px 0 18px; }
+  .public-shell .gateway-page > .page-heading { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .public-shell .gateway-page > .page-heading h1 { font-size: 26px; }
+  .public-shell .gateway-page > .page-heading p { font-size: 12px; }
+  .public-shell .gateway-request-heading { min-height: 0; padding: 16px; }
+  .public-shell .gateway-request-badge { margin-left: 0; }
+  .public-shell .gateway-request-section { padding: 14px 16px; }
+  .public-shell .gateway-flow-panel, .public-shell .gateway-policy-panel { padding: 20px 17px; }
+  .public-shell .gateway-flow-panel { border-radius: 16px 16px 0 0; }
+  .public-shell .gateway-policy-panel { border-radius: 0 0 16px 16px; }
+  .public-shell .gateway-privacy-footer { width: calc(100% - 28px); margin-inline: auto; }
+}
+@media (max-width: 430px) {
+  .public-shell .gateway-app-copy h2 { font-size: 16px; }
+  .public-shell .gateway-request-badge { min-height: 28px; font-size: 9px; }
+  .public-shell .gateway-request-section { padding: 13px; }
+  .public-shell .gateway-flow-panel, .public-shell .gateway-policy-panel { padding: 18px 14px; }
+  .public-shell .gateway-identified .text-action { font-size: 10px; }
+  .public-shell .gateway-steps-list > div { min-height: 66px; }
+}

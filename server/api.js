@@ -79,6 +79,9 @@ function setSessionCookie(res, token) {
 }
 
 function handleDbError(res, error) {
+  if (error?.code === 'INVALID_OAUTH_REQUEST') {
+    return fail(res, 400, error.message, 'No se pudo validar la aplicación solicitante o su dirección de retorno. Vuelve a iniciar el acceso desde la aplicación.')
+  }
   if (error?.code === 'PGRST205' || error?.code === '42P01') {
     return fail(res, 503, 'SCHEMA_MIGRATION_REQUIRED', 'Falta aplicar la migración Supabase de PlacetaID v27.')
   }
@@ -1157,6 +1160,12 @@ api.post('/public/authenticate', authLimiter, async (req, res) => {
 async function completeAuthorizedRequest(request, res) {
   const user = await getUserById(request.user_id)
   if (!user) throw Object.assign(new Error('IDENTITY_NOT_FOUND'), { code: 'PGRST116' })
+  if (request.redirect_uri && !request.app_id) {
+    throw Object.assign(new Error('OAUTH_APPLICATION_MISSING'), { code: 'INVALID_OAUTH_REQUEST' })
+  }
+  if (request.app_id && (!request.redirect_uri || !isAllowedRedirectUri(request.redirect_uri))) {
+    throw Object.assign(new Error('OAUTH_CALLBACK_MISSING'), { code: 'INVALID_OAUTH_REQUEST' })
+  }
   if (Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) return { stage: 'denied', reason: 'ACCOUNT_NOT_ACTIVE', login_correct: false }
   const [{ data: controls, error: controlsError }, { data: legal, error: legalError }] = await Promise.all([
     supabase.from('plid_v27_user_security').select('status,identity_verified').eq('user_id', user.id).maybeSingle(),
@@ -1177,6 +1186,9 @@ async function completeAuthorizedRequest(request, res) {
     app = pair
     service = pair?.services.find((item) => item.id === request.service_id)
     if (!app || app.status !== 'authorized' || !service || !service.enabled) return { stage: 'denied', reason: 'APP_OR_SERVICE_DISABLED', login_correct: false }
+    if (!Array.isArray(app.redirect_uris) || !app.redirect_uris.includes(request.redirect_uri)) {
+      throw Object.assign(new Error('OAUTH_CALLBACK_NOT_REGISTERED'), { code: 'INVALID_OAUTH_REQUEST' })
+    }
     const age = calculateAge(user)
     const requiredAge = Math.max(Number(app.min_age) || 0, Number(service.min_age) || 0)
     const roles = Array.isArray(service.allowed_roles) ? service.allowed_roles : app.allowed_roles
