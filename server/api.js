@@ -466,6 +466,62 @@ api.patch('/admin/users/:id', requireAdmin, async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+api.post('/admin/users/:id/password', authLimiter, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id)
+  const password = String(req.body?.password || '')
+  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, 'INVALID_USER_ID', 'La identidad indicada no es válida.')
+  if (password.length < 8 || password.length > 256 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return fail(res, 400, 'WEAK_PASSWORD', 'La contraseña debe tener entre 8 y 256 caracteres e incluir letras y números.')
+  }
+  try {
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,dip')
+      .eq('id', userId)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user) return fail(res, 404, 'USER_NOT_FOUND', 'No se encontró la identidad.')
+
+    const passwordHash = await bcrypt.hash(password, 12)
+    let legacySynced
+    try {
+      legacySynced = await updateLegacyPasswordHash(user.dip, passwordHash)
+    } catch (error) {
+      console.error('[PlacetaID API] Could not update the legacy account password:', error.message)
+      return fail(res, 503, 'LEGACY_PASSWORD_UPDATE_UNAVAILABLE', 'No se pudo confirmar la sincronización con PL26. V27 no ha guardado la credencial; comprueba PL26 antes de dar la contraseña por cambiada.')
+    }
+
+    const { error: credentialError } = await supabase.from('plid_v27_legacy_credentials').upsert({
+      user_id: user.id,
+      password_hash: passwordHash,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+    if (credentialError) {
+      console.error('[PlacetaID API] PL26 password changed, but the v27 credential could not be saved:', credentialError.message)
+      return fail(res, 503, 'LEGACY_PASSWORD_UPDATED_V27_SYNC_FAILED', 'La contraseña se actualizó en PL26, pero no pudo sincronizarse con PlacetaID v27. Repite el cambio desde Administración para completar la sincronización.')
+    }
+
+    const now = new Date().toISOString()
+    const [{ error: devicesError }, { error: sessionsError }] = await Promise.all([
+      supabase.from('plid_v27_devices').update({ active: false, revoked_at: now }).eq('user_id', user.id).eq('active', true).is('revoked_at', null),
+      supabase.from('plid_v27_sessions').update({ revoked_at: now }).eq('user_id', user.id).is('revoked_at', null),
+    ])
+    if (devicesError || sessionsError) {
+      console.error('[PlacetaID API] Password changed but session revocation failed:', devicesError?.message || sessionsError?.message)
+      return fail(res, 503, 'PASSWORD_UPDATED_REVOCATION_FAILED', 'La contraseña se actualizó, pero no se pudo confirmar la revocación de todas las sesiones. Revisa la seguridad de la cuenta.')
+    }
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      target_user_id: user.id,
+      event_type: 'admin_password_reset',
+      details: { legacySynced, sessionsRevoked: true },
+    })
+    if (auditError) {
+      console.error('[PlacetaID API] Password changed but the audit record could not be saved:', auditError.message)
+      return fail(res, 503, 'PASSWORD_UPDATED_AUDIT_FAILED', 'La contraseña y la revocación se completaron, pero no se pudo registrar la auditoría. Contacta con Administración.')
+    }
+    res.json({ ok: true, legacySynced, sessionsRevoked: true })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.patch('/admin/users/:id/access/:appId', requireAdmin, async (req, res) => {
   const decision = String(req.body?.decision || '')
   if (!['allow', 'deny'].includes(decision)) return fail(res, 400, 'INVALID_ACCESS_DECISION', 'La decisión de acceso no es válida.')
@@ -791,6 +847,107 @@ api.post('/public/identify', authLimiter, async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+async function verifyLegacyPassword(dip, password) {
+  const deviceKey = String(process.env.PLACETAID_V27_DEVICE_KEY || '')
+  if (deviceKey.length < 32) return { status: 'unavailable' }
+  const apiBase = String(process.env.PLACETAID_V27_LEGACY_AUTH_URL || 'https://id.laplaceta.org').trim()
+  try {
+    const baseUrl = new URL(apiBase)
+    if (baseUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(baseUrl.hostname)) {
+      throw new Error('Legacy credential bridge must use HTTPS')
+    }
+    const response = await fetch(new URL('/api/internal/legacy/credentials/verify', baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-PlacetaID-Device-Key': deviceKey,
+      },
+      body: JSON.stringify({ dip, password }),
+      signal: AbortSignal.timeout(8000),
+    })
+    const payload = await response.json().catch(() => null)
+    if (response.status === 404) return { status: 'not_found' }
+    if (response.status === 401 && payload?.error === 'INVALID_DEVICE_LINKING_KEY') {
+      throw new Error('Legacy credential bridge key mismatch')
+    }
+    if ([401, 403, 409].includes(response.status)) return { status: 'rejected' }
+    if (!response.ok) throw new Error(`Legacy credential bridge returned HTTP ${response.status}`)
+    if (payload?.ok !== true || !/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(payload.passwordHash || ''))) {
+      throw new Error('Legacy credential bridge returned an invalid response')
+    }
+    return { status: 'verified', passwordHash: payload.passwordHash, profile: payload.profile || {} }
+  } catch (error) {
+    console.error('[PlacetaID API] Legacy credential bridge unavailable:', error.message)
+    return { status: 'unavailable' }
+  }
+}
+
+async function updateLegacyPasswordHash(dip, passwordHash) {
+  const deviceKey = String(process.env.PLACETAID_V27_DEVICE_KEY || '')
+  if (deviceKey.length < 32) throw new Error('LEGACY_PASSWORD_BRIDGE_NOT_CONFIGURED')
+  const apiBase = String(process.env.PLACETAID_V27_LEGACY_AUTH_URL || 'https://id.laplaceta.org').trim()
+  const baseUrl = new URL(apiBase)
+  if (baseUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(baseUrl.hostname)) {
+    throw new Error('Legacy credential bridge must use HTTPS')
+  }
+  const response = await fetch(new URL('/api/internal/legacy/credentials/set', baseUrl), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PlacetaID-Device-Key': deviceKey,
+    },
+    body: JSON.stringify({ dip, passwordHash }),
+    signal: AbortSignal.timeout(8000),
+  })
+  const payload = await response.json().catch(() => null)
+  if (response.status === 404 && payload?.error === 'LEGACY_IDENTITY_NOT_FOUND') return false
+  if (!response.ok || payload?.ok !== true) {
+    throw new Error(`Legacy password update failed with HTTP ${response.status}`)
+  }
+  return true
+}
+
+async function importLegacyIdentity(dip, profile) {
+  const fullName = String(profile.nombre || '').trim().slice(0, 160)
+  const alias = String(profile.placeid || `PLID-${dip}`).trim().slice(0, 80)
+  const roles = ['administrador', 'miembro', 'entidad', 'visitante', 'moderador', 'empresa']
+  const role = roles.includes(String(profile.rol)) ? String(profile.rol) : 'miembro'
+  const blocked = profile.bloqueado === true || profile.banned === true || profile.activo === false
+  const birthDate = profile.fechaNacimiento && Number.isFinite(Date.parse(profile.fechaNacimiento))
+    ? new Date(profile.fechaNacimiento).toISOString().slice(0, 10)
+    : null
+  const identity = {
+    dip,
+    alias,
+    nombre_real: fullName || alias,
+    email: String(profile.correo || '').trim().toLowerCase() || null,
+    fecha_nacimiento: birthDate,
+    placeid: alias,
+    rol: role,
+    estado: blocked ? 'suspendido' : 'activo',
+    lista_negra: blocked ? 1 : 0,
+  }
+  const insertIdentity = () => supabase.from('solicitantes').insert(identity).select('id,dip,estado,lista_negra').single()
+  let { data, error } = await insertIdentity()
+  if (error?.code === '23505') {
+    const { data: existing, error: lookupError } = await supabase.from('solicitantes')
+      .select('id,dip,estado,lista_negra').eq('dip', dip).maybeSingle()
+    if (lookupError) throw lookupError
+    if (existing) return existing
+    identity.alias = `PLID-${dip}`
+    identity.placeid = identity.alias
+    ;({ data, error } = await insertIdentity())
+    if (error?.code === '23505') {
+      const { data: raced, error: raceError } = await supabase.from('solicitantes')
+        .select('id,dip,estado,lista_negra').eq('dip', dip).maybeSingle()
+      if (raceError) throw raceError
+      if (raced) return raced
+    }
+  }
+  if (error) throw error
+  return data
+}
+
 api.post('/public/password-authenticate', authLimiter, async (req, res) => {
   if (process.env.PLACETAID_V27_PASSWORD_LOGIN_ENABLED === 'false') {
     return fail(res, 403, 'PASSWORD_LOGIN_DISABLED', 'El acceso temporal con contraseña está desactivado.')
@@ -799,20 +956,48 @@ api.post('/public/password-authenticate', authLimiter, async (req, res) => {
   const password = String(req.body?.password || '')
   if (!isValidDip(dip) || !password || password.length > 256) return fail(res, 400, 'INVALID_CREDENTIALS', 'Introduce tu DIP y contraseña de PlacetaID.')
   try {
-    const { data: user, error: userError } = await supabase.from('solicitantes')
+    let { data: user, error: userError } = await supabase.from('solicitantes')
       .select('id,dip,estado,lista_negra')
       .eq('dip', dip)
       .maybeSingle()
     if (userError) throw userError
-    if (!user || Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) {
+    if (user && (Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase()))) {
       return fail(res, 401, 'INVALID_CREDENTIALS', 'El DIP o la contraseña no son correctos.')
     }
-    const { data: credential, error: credentialError } = await supabase.from('plid_v27_legacy_credentials')
-      .select('password_hash')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (credentialError) throw credentialError
-    if (!credential || !await bcrypt.compare(password, credential.password_hash)) {
+
+    let credential = null
+    if (user) {
+      const { data, error: credentialError } = await supabase.from('plid_v27_legacy_credentials')
+        .select('password_hash')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (credentialError) throw credentialError
+      credential = data
+    }
+
+    const legacyResult = await verifyLegacyPassword(dip, password)
+    if (legacyResult.status === 'verified') {
+      if (!user) {
+        user = await importLegacyIdentity(dip, legacyResult.profile)
+      }
+      if (Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) {
+        return fail(res, 401, 'INVALID_CREDENTIALS', 'El DIP o la contraseña no son correctos.')
+      }
+      const { error: credentialUpsertError } = await supabase.from('plid_v27_legacy_credentials').upsert({
+        user_id: user.id,
+        password_hash: legacyResult.passwordHash,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+      if (credentialUpsertError) throw credentialUpsertError
+    } else if (legacyResult.status === 'not_found') {
+      if (!credential || !await bcrypt.compare(password, credential.password_hash)) {
+        return fail(res, 401, 'INVALID_CREDENTIALS', 'El DIP o la contraseña no son correctos.')
+      }
+    } else if (legacyResult.status === 'unavailable') {
+      if (!credential || !await bcrypt.compare(password, credential.password_hash)) {
+        return fail(res, 503, 'LEGACY_CREDENTIAL_SERVICE_UNAVAILABLE', 'No se puede comprobar la contraseña ahora. Inténtalo de nuevo en unos minutos.')
+      }
+    } else {
       return fail(res, 401, 'INVALID_CREDENTIALS', 'El DIP o la contraseña no son correctos.')
     }
 
