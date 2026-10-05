@@ -3,6 +3,7 @@ import { api } from '../server/api.js'
 
 const app = express()
 app.disable('x-powered-by')
+app.use('/api/admin/apps/:id/logo', express.json({ limit: '1400kb' }))
 app.use(express.json({ limit: '48kb' }))
 app.get('/api/auth/fase1', (req, res) => {
   const clientId = String(req.query.client_id || '').trim()
