@@ -37,6 +37,8 @@ npm run build
 3. PlacetaID crea la aplicación y su servicio `general` en Supabase, y entrega un `client_id` y un `client_secret` una sola vez. Guarda el secreto en el servidor de la aplicación; no lo incluyas en el navegador, repositorios ni URLs.
 4. La aplicación aparece como pendiente. Autorízala desde su ficha de administración antes de aceptar inicios de sesión.
 
+En la ficha de cada aplicación, Administración muestra las URLs de inicio v27 ya construidas para cada callback, el endpoint exacto de canje y botones para copiarlos. El `state` del ejemplo es un marcador: cada aplicación debe generar un valor criptográficamente aleatorio y comprobarlo en su callback.
+
 La aplicación inicia la pasarela con una URL de este tipo:
 
 ```text
@@ -60,6 +62,8 @@ La aplicación móvil y PlacetaID Desktop deben aprobar la solicitud temporal en
 El servidor heredado `plid26-main` mantiene la verificación existente de DIP+contraseña. Después de verificarla, sincroniza el alta o la desvinculación del dispositivo con Supabase v27. Configura allí `PLACETAID_V27_API_URL` con el origen de PlacetaID v27 y `PLACETAID_V27_DEVICE_KEY` con el mismo valor de `PLACETAID_V27_DEVICE_KEY` de este servidor. La clave compartida solo se usa servidor a servidor; el API v27 guarda el hash del token, no la contraseña ni el token en claro. Los dispositivos ya vinculados deben volver a registrarse una vez desde móvil/Desktop para aparecer en Supabase.
 
 Si falta esta configuración, el servidor heredado informa que el dispositivo no se sincronizó; PlacetaID v27 no habilita el inicio de sesión hasta que la sincronización haya sido confirmada.
+
+Para recuperar cuentas PL26, ejecuta primero el dry-run y luego `npm run migrate:legacy-v27 -- --apply` desde `plid26-main`, con MongoDB y el puente interno configurados. Solo se transfieren hashes bcrypt; no se leen ni envían contraseñas en claro. La migración enlaza por DIP, crea perfiles que falten en `solicitantes` sin reescribir los existentes, y mantiene el estado bloqueado. Después cada usuario debe volver a vincular su móvil/Desktop para generar un método v27.
 
 ### Compatibilidad PL26 y dominio de Vercel
 

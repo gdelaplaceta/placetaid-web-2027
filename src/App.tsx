@@ -64,6 +64,7 @@ const LEGAL_VERSION = 'v27-2026-10'
 
 type Service = {
   id: string
+  key?: string
   name: string
   description: string
   enabled: boolean
@@ -433,6 +434,15 @@ function App() {
   function showToast(message: string) {
     setToast(message)
     window.setTimeout(() => setToast(''), 2400)
+  }
+
+  async function copyEndpoint(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      showToast(`${label} copiada`)
+    } catch {
+      showToast(`No se pudo copiar ${label.toLowerCase()}`)
+    }
   }
 
   function updateIntegration(id: string, update: (item: Integration) => Integration) {
@@ -993,7 +1003,34 @@ function App() {
               </div>
 
               {selected && <aside className="policy-panel">
-                <div className="policy-section integration-endpoint-section"><div className="policy-section-heading"><div><h3>Endpoint de la aplicación</h3><p>URL exacta para iniciar PlacetaID</p></div><Code2 size={16} /></div><div className="endpoint-row"><span className="field-label">Client ID</span><code>{selected.clientId ?? 'Pendiente de registrar'}</code></div><label className="field-label" htmlFor="redirect-uris">Redirect URIs permitidas</label><textarea id="redirect-uris" className="redirect-uri-input" rows={3} value={(selected.redirectUris ?? []).join('\n')} placeholder="https://app.ejemplo.org/placetaid/callback" onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, redirectUris: event.target.value.split(/\n|,/).map((uri) => uri.trim()).filter(Boolean), updated: 'Ahora' }))} /><small className="field-help">Debe coincidir exactamente con el parámetro <code>redirect_uri</code>, incluido protocolo, dominio, puerto y ruta.</small><label className="field-label" htmlFor="platforms">Plataformas compatibles</label><input id="platforms" className="redirect-uri-input" value={(selected.platforms ?? ['Web', 'Apple', 'Android', 'Chrome Extension', 'Windows Desktop']).join(', ')} onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, platforms: event.target.value.split(',').map((platform) => platform.trim()).filter(Boolean), updated: 'Ahora' }))} /><small className="field-help">Usa el mismo client_id para el ecosistema de la aplicación y registra callbacks específicos por plataforma.</small></div>
+                <div className="policy-section integration-endpoint-section">
+                  <div className="policy-section-heading"><div><h3>URLs exactas para la aplicación</h3><p>Usa estas direcciones para integrar PlacetaID v27</p></div><Code2 size={16} /></div>
+                  <div className="endpoint-row"><span className="field-label">Client ID</span><code>{selected.clientId ?? 'Pendiente de registrar'}</code></div>
+                  <label className="field-label" htmlFor="redirect-uris">Callbacks permitidos</label>
+                  <textarea id="redirect-uris" className="redirect-uri-input" rows={3} value={(selected.redirectUris ?? []).join('\n')} placeholder="https://app.ejemplo.org/placetaid/callback" onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, redirectUris: event.target.value.split(/\n|,/).map((uri) => uri.trim()).filter(Boolean), updated: 'Ahora' }))} />
+                  <small className="field-help">Cada <code>redirect_uri</code> debe coincidir exactamente, incluido el protocolo, dominio, puerto y ruta.</small>
+                  {(selected.redirectUris ?? []).map((redirectUri) => {
+                    const serviceKey = selected.services.find((service) => service.enabled && service.key)?.key || 'general'
+                    const loginUrl = new URL('/', window.location.origin)
+                    loginUrl.searchParams.set('client_id', selected.clientId || '')
+                    loginUrl.searchParams.set('redirect_uri', redirectUri)
+                    loginUrl.searchParams.set('service', serviceKey)
+                    loginUrl.searchParams.set('state', 'REEMPLAZAR_POR_STATE_ALEATORIO')
+                    return <div className="endpoint-value" key={redirectUri}>
+                      <span className="field-label">Inicio de sesión v27 · {serviceKey}</span>
+                      <div className="endpoint-copy-row"><code>{loginUrl.toString()}</code><button type="button" className="icon-button" aria-label="Copiar URL de inicio de sesión" onClick={() => void copyEndpoint('URL de inicio de sesión', loginUrl.toString())}><ClipboardCheck size={15} /></button></div>
+                      <small className="field-help">Genera un <code>state</code> aleatorio nuevo por intento y valida que vuelva sin cambios en el callback.</small>
+                    </div>
+                  })}
+                  <div className="endpoint-value">
+                    <span className="field-label">Canje del código · solo servidor</span>
+                    <div className="endpoint-copy-row"><code>{new URL('/api/public/exchange', window.location.origin).toString()}</code><button type="button" className="icon-button" aria-label="Copiar endpoint de canje" onClick={() => void copyEndpoint('Endpoint de canje', new URL('/api/public/exchange', window.location.origin).toString())}><ClipboardCheck size={15} /></button></div>
+                    <small className="field-help">Usa <code>POST</code> con <code>client_id</code>, <code>client_secret</code>, <code>code</code> y <code>redirect_uri</code>. Nunca pongas el secreto en el navegador.</small>
+                  </div>
+                  <label className="field-label" htmlFor="platforms">Plataformas compatibles</label>
+                  <input id="platforms" className="redirect-uri-input" value={(selected.platforms ?? ['Web', 'Apple', 'Android', 'Chrome Extension', 'Windows Desktop']).join(', ')} onChange={(event) => updateIntegration(selected.id, (item) => ({ ...item, platforms: event.target.value.split(',').map((platform) => platform.trim()).filter(Boolean), updated: 'Ahora' }))} />
+                  <small className="field-help">La aplicación abre la pasarela v27; su servidor canjea el código de un solo uso.</small>
+                </div>
                 <div className="policy-topline"><span className="eyebrow">FICHA DE INTEGRACIÓN</span><button className="more-button" aria-label="Más opciones" onClick={() => showToast('No hay más acciones disponibles en la vista previa')}><span /><span /><span /></button></div>
                 <div className="policy-app-heading"><span className={`app-mark app-mark-large app-mark-${selected.color}`}>{selected.initials}</span><div><h2>{selected.name}</h2><span>{selected.category} <span className="separator-dot">·</span> ID {selected.id.toUpperCase()}</span></div></div>
                 <div className="authorization-row"><div><strong>{selected.status === 'authorized' ? 'Integración autorizada' : selected.status === 'pending' ? 'Solicitud pendiente' : 'Integración desactivada'}</strong><small>{selected.status === 'authorized' ? 'Puede iniciar el flujo de acceso' : selected.status === 'pending' ? 'Aún no puede iniciar sesión' : 'El acceso está bloqueado para todos'}</small></div><button className={`switch ${selected.status === 'authorized' ? 'switch-on' : ''}`} role="switch" aria-checked={selected.status === 'authorized'} aria-label="Autorizar aplicación" onClick={() => toggleStatus(selected)}><span /></button></div>

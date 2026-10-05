@@ -247,21 +247,78 @@ legacyApi.post('/internal/legacy/credentials/import', deviceLimiter, async (req,
   if (!Array.isArray(entries) || entries.length < 1 || entries.length > 500) return res.status(400).json({ error: 'INVALID_CREDENTIAL_BATCH' })
   try {
     const rows = []
+    let identitiesCreated = 0
     for (const entry of entries) {
       const dip = normalizeDip(entry?.dip)
       const passwordHash = String(entry?.passwordHash || '')
       if (!isValidDip(dip) || !/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(passwordHash)) {
         return res.status(400).json({ error: 'INVALID_CREDENTIAL_ENTRY' })
       }
-      const user = await getUser(dip)
-      if (!user) continue
+      let user = await getUser(dip)
+      if (!user && entry.profile && typeof entry.profile === 'object') {
+        const profile = entry.profile
+        const fullName = String(profile.nombre || '').trim().slice(0, 160)
+        const alias = String(profile.placeid || `PLID-${dip}`).trim().slice(0, 80)
+        const role = ['administrador', 'miembro', 'entidad', 'visitante', 'moderador', 'empresa'].includes(String(profile.rol))
+          ? String(profile.rol)
+          : 'miembro'
+        const blocked = profile.bloqueado === true || profile.banned === true || profile.activo === false
+        const birthDate = profile.fechaNacimiento && Number.isFinite(Date.parse(profile.fechaNacimiento))
+          ? new Date(profile.fechaNacimiento).toISOString().slice(0, 10)
+          : null
+        const identity = {
+          dip,
+          alias,
+          nombre_real: fullName || alias,
+          email: String(profile.correo || '').trim().toLowerCase() || null,
+          fecha_nacimiento: birthDate,
+          placeid: alias,
+          rol: role,
+          estado: blocked ? 'suspendido' : 'activo',
+          lista_negra: blocked ? 1 : 0,
+        }
+        if (Number.isInteger(profile.edad) && profile.edad >= 0 && profile.edad <= 130) identity.edad = profile.edad
+        const insertIdentity = () => supabase.from('solicitantes').insert(identity).select('id,dip,alias,nombre_real,email,fecha_nacimiento,edad,placeid,rol,estado,lista_negra').single()
+        let insertResult = await insertIdentity()
+        if (insertResult.error?.code === '23505') {
+          user = await getUser(dip)
+          if (!user && identity.alias !== `PLID-${dip}`) {
+            identity.alias = `PLID-${dip}`
+            identity.placeid = identity.alias
+            insertResult = await insertIdentity()
+            if (insertResult.error && insertResult.error.code !== '23505') throw insertResult.error
+            if (insertResult.error?.code === '23505') user = await getUser(dip)
+          }
+          if (!user && insertResult.error) {
+            return res.status(409).json({ error: 'LEGACY_IDENTITY_CONFLICT', message: 'No se pudo crear el perfil legado por un conflicto de identidad.' })
+          }
+          if (!user && !insertResult.data) {
+            return res.status(409).json({ error: 'LEGACY_IDENTITY_REQUIRED', message: 'El usuario legado no tiene un perfil compatible para importar.' })
+          }
+        } else if (insertResult.error) {
+          throw insertResult.error
+        } else {
+          user = insertResult.data
+          identitiesCreated++
+        }
+        if (!user && insertResult.data) {
+          user = insertResult.data
+          identitiesCreated++
+        }
+      }
+      if (!user) return res.status(409).json({ error: 'LEGACY_IDENTITY_REQUIRED', message: 'El usuario legado no tiene un perfil compatible para importar.' })
       rows.push({ user_id: user.id, password_hash: passwordHash, updated_at: new Date().toISOString() })
     }
-    if (rows.length) {
-      const { error } = await supabase.from('plid_v27_legacy_credentials').upsert(rows, { onConflict: 'user_id' })
+    const uniqueRows = [...new Map(rows.map((row) => [row.user_id, row])).values()]
+    let imported = 0
+    if (uniqueRows.length) {
+      const { data, error } = await supabase.from('plid_v27_legacy_credentials')
+        .upsert(uniqueRows, { onConflict: 'user_id', ignoreDuplicates: true })
+        .select('user_id')
       if (error) throw error
+      imported = data?.length || 0
     }
-    res.json({ ok: true, received: entries.length, imported: rows.length })
+    res.json({ ok: true, received: entries.length, imported, identitiesCreated })
   } catch (error) { errorResponse(res, error) }
 })
 
