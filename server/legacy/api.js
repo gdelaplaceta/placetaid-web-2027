@@ -117,6 +117,50 @@ function requireBoundDevice(req, res, dip) {
   })
 }
 
+async function listPendingAuthRequests(userId, dip) {
+  const [{ data: legacyRequests, error: legacyError }, { data: requests, error: requestError }] = await Promise.all([
+    supabase.from('plid_v27_legacy_auth_requests').select('*')
+      .eq('user_id', userId).eq('status', 'pending').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(20),
+    supabase.from('plid_v27_auth_requests').select('id,request_code,app_id,service_id,method,status,redirect_uri,created_at,expires_at')
+      .eq('user_id', userId).in('method', ['mobile', 'desktop']).eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(20),
+  ])
+  if (legacyError) throw legacyError
+  if (requestError) throw requestError
+  const appIds = [...new Set((requests || []).map((request) => request.app_id).filter(Boolean))]
+  const serviceIds = [...new Set((requests || []).map((request) => request.service_id).filter(Boolean))]
+  const [{ data: apps, error: appError }, { data: services, error: serviceError }] = await Promise.all([
+    appIds.length ? supabase.from('plid_v27_integrations').select('id,name').in('id', appIds) : { data: [], error: null },
+    serviceIds.length ? supabase.from('plid_v27_services').select('id,name').in('id', serviceIds) : { data: [], error: null },
+  ])
+  if (appError) throw appError
+  if (serviceError) throw serviceError
+  const appNames = new Map((apps || []).map((app) => [app.id, app.name]))
+  const serviceNames = new Map((services || []).map((service) => [service.id, service.name]))
+  return [
+    ...(legacyRequests || []).map((request) => ({
+      _id: request.id,
+      identidad: dip,
+      codigo: request.request_code,
+      servicio: request.service,
+      servicioUrl: request.service_url,
+      plataforma: request.platform,
+      creadoEn: request.created_at,
+      estado: request.status,
+    })),
+    ...(requests || []).map((request) => ({
+      _id: request.id,
+      identidad: dip,
+      codigo: request.request_code,
+      servicio: serviceNames.get(request.service_id) || appNames.get(request.app_id) || 'Acceso PlacetaID',
+      servicioUrl: request.redirect_uri,
+      plataforma: request.method,
+      creadoEn: request.created_at,
+      estado: request.status,
+    })),
+  ].sort((a, b) => String(b.creadoEn || '').localeCompare(String(a.creadoEn || '')))
+}
+
 async function insertNotification({ dip, title, message, type, objectId }) {
   const { error } = await supabase.from('rsp_notificaciones').insert({
     id: randomUUID(),
@@ -446,10 +490,7 @@ legacyApi.get('/mobil/pending', async (req, res) => {
   try {
     const bound = await requireBoundDevice(req, res, dip)
     if (!bound) return
-    const { data, error } = await supabase.from('plid_v27_legacy_auth_requests').select('*')
-      .eq('user_id', bound.user.id).eq('status', 'pending').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(20)
-    if (error) throw error
-    res.json({ ok: true, requests: (data || []).map((r) => ({ _id: r.id, dip, codigo: r.request_code, servicio: r.service, servicioUrl: r.service_url, plataforma: r.platform, creadoEn: r.created_at, estado: r.status })) })
+    res.json({ ok: true, requests: await listPendingAuthRequests(bound.user.id, dip) })
   } catch (error) { errorResponse(res, error) }
 })
 
@@ -463,11 +504,35 @@ legacyApi.post('/mobil/authorize', async (req, res) => {
     const { data: authRequest, error } = await supabase.from('plid_v27_legacy_auth_requests').select('id,user_id,status,expires_at')
       .eq('id', requestId).maybeSingle()
     if (error) throw error
-    if (!authRequest || authRequest.user_id !== bound.user.id) return res.status(404).json({ error: 'Solicitud no encontrada' })
-    if (authRequest.status !== 'pending' || Date.parse(authRequest.expires_at) <= Date.now()) return res.status(410).json({ error: 'La solicitud ha expirado o ya fue procesada' })
     const status = req.body?.authorized === true ? 'authorized' : 'denied'
-    const { error: updateError } = await supabase.from('plid_v27_legacy_auth_requests').update({ status, completed_at: new Date().toISOString() }).eq('id', requestId).eq('status', 'pending')
+    if (authRequest) {
+      if (authRequest.user_id !== bound.user.id) return res.status(404).json({ error: 'Solicitud no encontrada' })
+      if (authRequest.status !== 'pending' || Date.parse(authRequest.expires_at) <= Date.now()) return res.status(410).json({ error: 'La solicitud ha expirado o ya fue procesada' })
+      const { error: updateError } = await supabase.from('plid_v27_legacy_auth_requests').update({ status, completed_at: new Date().toISOString() }).eq('id', requestId).eq('status', 'pending')
+      if (updateError) throw updateError
+      return res.json({ ok: true, estado: status })
+    }
+    const { data: v27Request, error: v27Error } = await supabase.from('plid_v27_auth_requests')
+      .select('id,user_id,method,status,expires_at')
+      .eq('id', requestId)
+      .maybeSingle()
+    if (v27Error) throw v27Error
+    if (!v27Request || v27Request.user_id !== bound.user.id || v27Request.method !== bound.device.method) return res.status(404).json({ error: 'Solicitud no encontrada' })
+    if (v27Request.status !== 'pending' || Date.parse(v27Request.expires_at) <= Date.now()) return res.status(410).json({ error: 'La solicitud ha expirado o ya fue procesada' })
+    const { data: updated, error: updateError } = await supabase.from('plid_v27_auth_requests')
+      .update({ status, completed_at: new Date().toISOString() })
+      .eq('id', requestId).eq('user_id', bound.user.id).eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
     if (updateError) throw updateError
+    if (!updated) return res.status(409).json({ error: 'La solicitud ya fue procesada' })
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      actor_user_id: bound.user.id,
+      target_user_id: bound.user.id,
+      event_type: status === 'authorized' ? 'device_authentication_approved' : 'device_authentication_denied',
+      details: { method: bound.device.method, request_id: requestId },
+    })
+    if (auditError) throw auditError
     res.json({ ok: true, estado: status })
   } catch (error) { errorResponse(res, error) }
 })
@@ -849,10 +914,7 @@ legacyApi.post('/mobil/multi/pending', async (req, res) => {
     for (const dip of dips) {
       const bound = await requireBoundDevice(req, res, dip)
       if (!bound) return
-      const { data, error } = await supabase.from('plid_v27_legacy_auth_requests').select('*')
-        .eq('user_id', bound.user.id).eq('status', 'pending').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
-      if (error) throw error
-      output.push(...(data || []).map((r) => ({ _id: r.id, identidad: dip, codigo: r.request_code, servicio: r.service, servicioUrl: r.service_url, plataforma: r.platform, creadoEn: r.created_at, estado: r.status })))
+      output.push(...await listPendingAuthRequests(bound.user.id, dip))
     }
     res.json(output)
   } catch (error) { errorResponse(res, error) }

@@ -48,6 +48,7 @@ type LegalDocument = 'terms' | 'privacy'
 type GatewayMethod = 'mobile' | 'authenticator' | 'desktop'
 type GatewayResponse = {
   stage?: string
+  error?: string
   login_correct?: boolean
   requestId?: string
   method?: GatewayMethod
@@ -315,6 +316,7 @@ function App() {
   const [gatewayStage, setGatewayStage] = useState<GatewayStage>('entry')
   const [gatewayUser, setGatewayUser] = useState<ManagedUser | null>(null)
   const [gatewayError, setGatewayError] = useState('')
+  const [gatewayNeedsEnrollment, setGatewayNeedsEnrollment] = useState(false)
   const [gatewayOtp, setGatewayOtp] = useState('')
   const [gatewayRequestId, setGatewayRequestId] = useState('')
   const [gatewayMethod, setGatewayMethod] = useState<GatewayMethod | null>(null)
@@ -571,6 +573,7 @@ function App() {
   async function submitGatewayDip(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setGatewayError('')
+    setGatewayNeedsEnrollment(false)
     const dip = gatewayDip.replace(/[\s-]/g, '').toUpperCase()
     if (!/^\d{8}[A-Z]$/.test(dip)) {
       setGatewayError('Introduce el DIP completo: 8 números y una letra.')
@@ -598,7 +601,12 @@ function App() {
       })
       const payload: GatewayResponse = await response.json()
       if (!response.ok) {
-        setGatewayError(payload.message || 'No se pudo iniciar la autenticación.')
+        if (payload.error === 'NO_ACTIVE_METHOD') {
+          setGatewayNeedsEnrollment(true)
+          setGatewayError('Esta cuenta aún no tiene un método v27 activo. Vincula PlacetaID Móvil o Desktop para continuar.')
+        } else {
+          setGatewayError(payload.message || 'No se pudo iniciar la autenticación.')
+        }
         return
       }
       if (!payload.requestId || !payload.method) {
@@ -1107,13 +1115,17 @@ function App() {
               <div className="gateway-step-heading"><span className={`step-number ${gatewayStage !== 'entry' ? 'step-complete' : ''}`}>{gatewayStage === 'entry' ? '01' : <Check size={13} />}</span><div><h2>Identifica tu cuenta</h2><p>Introduce el DIP asociado a PlacetaID.</p></div></div>
               {gatewayStage === 'entry' && <form className="gateway-form" onSubmit={submitGatewayDip}>
                 <label className="field-label" htmlFor="gateway-dip">DIP</label>
-                <input id="gateway-dip" className="gateway-dip-input" value={gatewayDip} onChange={(event) => { setGatewayDip(event.target.value.toUpperCase()); setGatewayError('') }} placeholder="12345678Z" maxLength={11} autoComplete="username" required />
+                <input id="gateway-dip" className="gateway-dip-input" value={gatewayDip} onChange={(event) => { setGatewayDip(event.target.value.toUpperCase()); setGatewayError(''); setGatewayNeedsEnrollment(false) }} placeholder="12345678Z" maxLength={11} autoComplete="username" required />
                 <p className="gateway-input-note"><LockKeyhole size={13} />El DIP solo localiza la identidad; no permite iniciar sesión por sí solo.</p>
                 {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+                {gatewayNeedsEnrollment && <div className="gateway-enrollment-help">
+                  <p>Abre PlacetaID Móvil e inicia sesión con el DIP y la contraseña de tu cuenta PL26. Desde la app, vincula este dispositivo; después vuelve aquí para iniciar sesión.</p>
+                  <a className="button-quiet" href="https://play.google.com/store/search?q=PlacetaID&c=apps" target="_blank" rel="noreferrer">Buscar PlacetaID en Google Play</a>
+                </div>}
                 <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || supabaseStatus !== 'ready'}>{gatewayBusy ? 'Buscando identidad…' : 'Continuar'} <ArrowRight size={15} /></button>
               </form>}
               {gatewayStage === 'detected' && <div className="method-detection">
-                <div className="gateway-identified"><span className="user-avatar user-avatar-large"><Fingerprint size={20} /></span><div><strong>Cuenta localizada</strong><small>Datos personales ocultos hasta completar la autenticación</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayRequestId(''); setGatewayMethod(null); setGatewayError('') }}>Cambiar DIP</button></div>
+                <div className="gateway-identified"><span className="user-avatar user-avatar-large"><Fingerprint size={20} /></span><div><strong>Cuenta localizada</strong><small>Datos personales ocultos hasta completar la autenticación</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayRequestId(''); setGatewayMethod(null); setGatewayError(''); setGatewayNeedsEnrollment(false) }}>Cambiar DIP</button></div>
                 <div className="gateway-step-heading"><span className="step-number">02</span><div><h2>Confirma tu identidad</h2><p>{gatewayMethod === 'mobile' ? 'Aprueba la solicitud en PlacetaID móvil.' : gatewayMethod === 'desktop' ? 'Aprueba la solicitud en PlacetaID Desktop.' : 'Introduce el código actual de tu Autentificador.'}</p></div></div>
                 <div className="priority-method priority-method-selected"><span className="priority-method-icon">{gatewayMethod === 'mobile' ? <Smartphone size={16} /> : gatewayMethod === 'desktop' ? <Monitor size={16} /> : <KeyRound size={16} />}</span><span><strong>{gatewayMethod === 'mobile' ? 'PlacetaID móvil' : gatewayMethod === 'desktop' ? 'PlacetaID Desktop' : 'Autentificador'}</strong><small>Solicitud protegida y temporal</small></span><span className="priority-method-state">VINCULADO</span></div>
                 {gatewayMethod === 'authenticator' && <><label className="field-label gateway-otp-label" htmlFor="gateway-otp">Código de seis cifras</label><input className="gateway-otp-input" id="gateway-otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={gatewayOtp} onChange={(event) => { setGatewayOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setGatewayError('') }} placeholder="000000" /></>}

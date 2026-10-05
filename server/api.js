@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import { supabase, supabaseReady } from './supabase.js'
-import { createRandomToken, hashToken, isValidDip, normalizeDip, secureEquals, signSession, verifySession } from './security.js'
+import { createRandomToken, encryptSecret, hashToken, isValidDip, normalizeDip, secureEquals, signSession, verifySession } from './security.js'
 import { legacyApi } from './legacy/api.js'
 
 export const api = Router()
@@ -89,6 +89,66 @@ function userStatus(user, controls) {
   if (['suspendido', 'suspended', 'bloqueado', 'blocked'].includes(status)) return 'suspended'
   if (['cerrado', 'closed', 'inactivo', 'inactive'].includes(status)) return 'closed'
   return 'active'
+}
+
+async function findOrCreateLinkedIdentity(dip, profile) {
+  const { data: existing, error: lookupError } = await supabase.from('solicitantes')
+    .select('id,dip,estado,lista_negra')
+    .eq('dip', dip)
+    .maybeSingle()
+  if (lookupError) throw lookupError
+  if (existing || !profile || typeof profile !== 'object') return existing
+
+  const alias = String(profile.placeid || `PLID-${dip}`).trim().slice(0, 80) || `PLID-${dip}`
+  const fullName = [profile.nombre, profile.apellidos].filter(Boolean).map((value) => String(value).trim()).join(' ').slice(0, 160)
+  const role = ['administrador', 'miembro', 'entidad', 'visitante', 'moderador', 'empresa'].includes(String(profile.rol))
+    ? String(profile.rol)
+    : 'miembro'
+  const blocked = profile.bloqueado === true || profile.banned === true || profile.activo === false
+  const birthDate = profile.fechaNacimiento && Number.isFinite(Date.parse(profile.fechaNacimiento))
+    ? new Date(profile.fechaNacimiento).toISOString().slice(0, 10)
+    : null
+  const email = String(profile.correo || '').trim().toLowerCase()
+  const identity = {
+    dip,
+    alias,
+    nombre_real: fullName || alias,
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null,
+    fecha_nacimiento: birthDate,
+    placeid: alias,
+    rol: role,
+    estado: blocked ? 'suspendido' : 'activo',
+    lista_negra: blocked ? 1 : 0,
+  }
+  if (Number.isInteger(profile.edad) && profile.edad >= 0 && profile.edad <= 130) identity.edad = profile.edad
+
+  const insertIdentity = () => supabase.from('solicitantes')
+    .insert(identity)
+    .select('id,dip,estado,lista_negra')
+    .single()
+  let result = await insertIdentity()
+  if (result.error?.code === '23505') {
+    const { data: raced, error: racedError } = await supabase.from('solicitantes')
+      .select('id,dip,estado,lista_negra')
+      .eq('dip', dip)
+      .maybeSingle()
+    if (racedError) throw racedError
+    if (raced) return raced
+    identity.alias = `PLID-${dip}`
+    identity.placeid = identity.alias
+    identity.email = null
+    result = await insertIdentity()
+    if (result.error?.code === '23505') {
+      const { data: retried, error: retryError } = await supabase.from('solicitantes')
+        .select('id,dip,estado,lista_negra')
+        .eq('dip', dip)
+        .maybeSingle()
+      if (retryError) throw retryError
+      if (retried) return retried
+    }
+  }
+  if (result.error) throw result.error
+  return result.data
 }
 
 function mapService(row) {
@@ -408,11 +468,7 @@ api.post('/internal/devices/register', deviceEnrollmentLimiter, requireDeviceEnr
     return fail(res, 400, 'INVALID_DEVICE_REGISTRATION', 'Los datos del dispositivo no son válidos.')
   }
   try {
-    const { data: user, error: userError } = await supabase.from('solicitantes')
-      .select('id,estado,lista_negra')
-      .eq('dip', dip)
-      .maybeSingle()
-    if (userError) throw userError
+    const user = await findOrCreateLinkedIdentity(dip, req.body?.profile)
     if (!user || userStatus(user, null) !== 'active') return fail(res, 403, 'IDENTITY_NOT_AVAILABLE', 'No se puede vincular un dispositivo a esta identidad.')
     const { data: controls, error: controlsError } = await supabase.from('plid_v27_user_security')
       .select('status')
@@ -442,6 +498,123 @@ api.post('/internal/devices/register', deviceEnrollmentLimiter, requireDeviceEnr
     })
     if (auditError) throw auditError
     res.json({ ok: true, deviceId: device.id, method: device.method, expiresAt: device.expires_at })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/internal/devices/migrate', deviceEnrollmentLimiter, requireDeviceEnrollmentKey, async (req, res) => {
+  const entries = req.body?.entries
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 500) {
+    return fail(res, 400, 'INVALID_DEVICE_BATCH', 'El lote debe contener entre 1 y 500 dispositivos.')
+  }
+  try {
+    const now = new Date()
+    const rows = new Map()
+    let skippedInactive = 0
+    for (const entry of entries) {
+      const dip = normalizeDip(entry?.dip)
+      const deviceId = String(entry?.deviceId || '').trim()
+      const method = String(entry?.method || '')
+      if (!isValidDip(dip) || !deviceId || deviceId.length > 256 || /[\u0000-\u001f]/.test(deviceId) || !['mobile', 'desktop'].includes(method)) {
+        return fail(res, 400, 'INVALID_DEVICE_ENTRY', 'El lote contiene un dispositivo con datos no válidos.')
+      }
+      const user = await findOrCreateLinkedIdentity(dip, entry.profile)
+      if (!user || userStatus(user, null) !== 'active') {
+        skippedInactive++
+        continue
+      }
+      rows.set(`${user.id}:${deviceId}`, {
+        user_id: user.id,
+        device_id: deviceId,
+        device_name: String(entry.deviceName || 'Dispositivo').trim().slice(0, 100) || 'Dispositivo',
+        method,
+        session_token_hash: hashToken(deviceId),
+        active: true,
+        expires_at: new Date(now.getTime() + deviceLifetimeMs).toISOString(),
+        last_seen_at: now.toISOString(),
+        revoked_at: null,
+      })
+    }
+
+    const devices = [...rows.values()]
+    if (devices.length) {
+      const { error } = await supabase.from('plid_v27_devices')
+        .upsert(devices, { onConflict: 'user_id,device_id' })
+      if (error) throw error
+      const userIds = [...new Set(devices.map((device) => device.user_id))]
+      const { error: auditError } = await supabase.from('plid_v27_audit').insert(userIds.map((userId) => ({
+        target_user_id: userId,
+        event_type: 'legacy_devices_migrated',
+        details: { device_count: devices.filter((device) => device.user_id === userId).length },
+      })))
+      if (auditError) throw auditError
+    }
+    res.json({ ok: true, processed: entries.length, migrated: devices.length, skippedInactive })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/internal/authenticators/migrate', deviceEnrollmentLimiter, requireDeviceEnrollmentKey, async (req, res) => {
+  const entries = req.body?.entries
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 500) {
+    return fail(res, 400, 'INVALID_AUTHENTICATOR_BATCH', 'El lote debe contener entre 1 y 500 autenticadores.')
+  }
+  try {
+    let migrated = 0
+    let skippedInactive = 0
+    let skippedExisting = 0
+    const now = new Date()
+    for (const entry of entries) {
+      const dip = normalizeDip(entry?.dip)
+      const secret = String(entry?.secret || '').replace(/=+$/g, '').toUpperCase()
+      if (!isValidDip(dip) || !/^[A-Z2-7]{16,64}$/.test(secret)) {
+        return fail(res, 400, 'INVALID_AUTHENTICATOR_ENTRY', 'El lote contiene un autenticador no válido.')
+      }
+      const user = await findOrCreateLinkedIdentity(dip, entry.profile)
+      if (!user || userStatus(user, null) !== 'active') {
+        skippedInactive++
+        continue
+      }
+      const { data: inserted, error: authenticatorError } = await supabase.from('plid_v27_authenticators')
+        .upsert({ user_id: user.id, secret_encrypted: encryptSecret(secret), enabled: true, updated_at: now.toISOString() }, { onConflict: 'user_id', ignoreDuplicates: true })
+        .select('user_id')
+      if (authenticatorError) throw authenticatorError
+      let enabled = Boolean(inserted?.length)
+      if (!enabled) {
+        const { data: existing, error: existingError } = await supabase.from('plid_v27_authenticators')
+          .select('enabled')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (existingError) throw existingError
+        enabled = existing?.enabled === true
+        if (!enabled) {
+          skippedExisting++
+          continue
+        }
+      }
+      if (inserted?.length) migrated++
+      else skippedExisting++
+      const { error: deviceError } = await supabase.from('plid_v27_devices').upsert({
+        user_id: user.id,
+        device_id: 'legacy-authenticator',
+        device_name: 'Autentificador',
+        method: 'authenticator',
+        session_token_hash: hashToken(createRandomToken()),
+        active: true,
+        expires_at: new Date(now.getTime() + deviceLifetimeMs).toISOString(),
+        last_seen_at: now.toISOString(),
+        revoked_at: null,
+      }, { onConflict: 'user_id,device_id' })
+      if (deviceError) throw deviceError
+      if (inserted?.length) {
+        const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+          actor_user_id: user.id,
+          target_user_id: user.id,
+          event_type: 'legacy_authenticator_migrated',
+          details: {},
+        })
+        if (auditError) throw auditError
+      }
+    }
+    res.json({ ok: true, processed: entries.length, migrated, skippedInactive, skippedExisting })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -514,8 +687,8 @@ api.post('/public/identify', authLimiter, async (req, res) => {
     if (devicesError) throw devicesError
     if (authenticatorError) throw authenticatorError
     const sessions = new Set((devices || []).map((row) => row.method))
-    const method = sessions.has('mobile') ? 'mobile' : authenticator?.enabled && sessions.has('authenticator') ? 'authenticator' : sessions.has('desktop') ? 'desktop' : null
-    if (!method) return fail(res, 409, 'NO_ACTIVE_METHOD', 'No hay un método de identificación activo. Vincula PlacetaID móvil o Desktop desde un dispositivo seguro.')
+    const method = authenticator?.enabled && sessions.has('authenticator') ? 'authenticator' : sessions.has('mobile') ? 'mobile' : sessions.has('desktop') ? 'desktop' : null
+    if (!method) return fail(res, 409, 'NO_ACTIVE_METHOD', 'No hay un método de identificación activo. Abre PlacetaID Móvil, inicia sesión con las credenciales de tu cuenta y vincula el dispositivo; después vuelve a intentarlo.')
 
     const { data: request, error: requestError } = await supabase.from('plid_v27_auth_requests').insert({
       request_code: createRandomToken(18), user_id: user.id, app_id: app?.id ?? null, service_id: service?.id ?? null,
