@@ -67,9 +67,9 @@ Para recuperar cuentas PL26, ejecuta primero el dry-run y luego `npm run migrate
 
 ### Compatibilidad PL26 y dominio de Vercel
 
-`https://placetaid-web-plan2027.vercel.app` actualmente no tiene un deployment. El deployment v27 comprobado usa `https://placetaid-web-2027.vercel.app`. Configura Nexe con `PLACETAID_URL=https://placetaid-web-2027.vercel.app` y despliega el handler actualizado para que use OAuth v27. El endpoint `/api/auth/fase1` de compatibilidad reenvía las solicitudes antiguas al flujo v27 cuando esta versión esté desplegada.
+El alias `https://placetaid-web-2027.vercel.app` redirige al alias activo `https://placetaid-web-plan2027.vercel.app`. Usa este último como origen de PlacetaID en `PLACETAID_URL` y para `PLACETAID_V27_API_URL`; el endpoint `/api/auth/fase1` convierte las solicitudes antiguas (`from`) al flujo v27. Verificado: la ruta conserva `client_id`, el callback y `state`, y normaliza el servicio a `general`.
 
-Configura RSP con `PLACETAID_API_URL=https://placetaid-web-2027.vercel.app/api`. Aplica las migraciones y confirma que `/api/health` responda `ok: true` antes de probar el login. Para transferir el dominio histórico de PL26, asígnalo como alias al deployment v27 desde Vercel; el código por sí solo no crea deployments ni reasigna dominios.
+Configura RSP con `PLACETAID_API_URL=https://placetaid-web-plan2027.vercel.app/api`. La última comprobación de producción reportó faltantes de `plid_v27_legacy_credentials`, `plid_v27_legacy_auth_requests`, `rsp_votaciones`, y `rsp_documentos` (también se crea `rsp_registro_votos` y `rsp_notificaciones`). Aplica, en orden, las cuatro migraciones indicadas arriba en el SQL Editor del proyecto Supabase y confirma que `/api/health` responda `ok: true` antes de probar login o migrar cuentas. El acceso SQL de Supabase no está disponible desde el entorno de desarrollo.
 
 ## Qué es persistente
 

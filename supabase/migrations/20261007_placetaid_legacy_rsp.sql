@@ -20,6 +20,106 @@ create table if not exists public.plid_v27_legacy_auth_requests (
 create index if not exists plid_v27_legacy_auth_requests_pending_idx
   on public.plid_v27_legacy_auth_requests (user_id, status, expires_at);
 
+create table if not exists public.rsp_votaciones (
+  id text primary key,
+  titulo text not null,
+  descripcion text not null default '',
+  categoria text not null default 'General',
+  grupo text not null default 'Publico_General',
+  quorum integer not null default 50,
+  a_favor integer not null default 0,
+  en_contra integer not null default 0,
+  abstenciones integer not null default 0,
+  total_votos integer not null default 0,
+  total_emitidos integer not null default 0,
+  estado text not null default 'Activa',
+  resultado text,
+  opciones jsonb not null default '["a_favor","en_contra","abstencion"]'::jsonb,
+  resultados jsonb not null default '{}'::jsonb,
+  destinatarios jsonb not null default '[]'::jsonb,
+  reunion_id text,
+  requiere_quorum boolean not null default true,
+  fecha_limite timestamptz,
+  fecha_cierre timestamptz,
+  fecha_publicacion timestamptz,
+  fecha_creacion timestamptz not null default now()
+);
+
+create table if not exists public.rsp_registro_votos (
+  id text primary key,
+  votacion_id text not null references public.rsp_votaciones(id) on delete cascade,
+  dip text not null,
+  nombre text not null,
+  categoria text not null,
+  voto text not null,
+  hash text not null,
+  oficial boolean not null default true,
+  "timestamp" timestamptz not null default now()
+);
+
+create index if not exists rsp_registro_votos_votacion_idx
+  on public.rsp_registro_votos (votacion_id, "timestamp" desc);
+create index if not exists rsp_registro_votos_dip_idx
+  on public.rsp_registro_votos (dip);
+
+create table if not exists public.rsp_notificaciones (
+  id uuid primary key default gen_random_uuid(),
+  nivel text not null default 'info',
+  titulo text not null,
+  mensaje text not null,
+  servicio text not null default 'placetaid',
+  destinatario_dip text not null,
+  objeto_tipo text,
+  objeto_id text,
+  leida boolean not null default false,
+  fecha timestamptz not null default now(),
+  canal text not null default 'inapp',
+  leida_en timestamptz
+);
+
+alter table public.rsp_votaciones
+  add column if not exists id text,
+  add column if not exists titulo text,
+  add column if not exists categoria text not null default 'General',
+  add column if not exists grupo text not null default 'Publico_General',
+  add column if not exists quorum integer not null default 50,
+  add column if not exists a_favor integer not null default 0,
+  add column if not exists en_contra integer not null default 0,
+  add column if not exists abstenciones integer not null default 0,
+  add column if not exists total_votos integer not null default 0,
+  add column if not exists total_emitidos integer not null default 0,
+  add column if not exists estado text not null default 'Activa',
+  add column if not exists resultado text,
+  add column if not exists fecha_creacion timestamptz not null default now();
+
+alter table public.rsp_registro_votos
+  add column if not exists id text,
+  add column if not exists votacion_id text,
+  add column if not exists dip text,
+  add column if not exists nombre text,
+  add column if not exists categoria text,
+  add column if not exists voto text,
+  add column if not exists hash text,
+  add column if not exists oficial boolean not null default true,
+  add column if not exists "timestamp" timestamptz not null default now();
+
+alter table public.rsp_notificaciones
+  add column if not exists id uuid default gen_random_uuid(),
+  add column if not exists nivel text not null default 'info',
+  add column if not exists titulo text,
+  add column if not exists mensaje text,
+  add column if not exists servicio text not null default 'placetaid',
+  add column if not exists destinatario_dip text,
+  add column if not exists objeto_tipo text,
+  add column if not exists objeto_id text,
+  add column if not exists leida boolean not null default false,
+  add column if not exists fecha timestamptz not null default now(),
+  add column if not exists canal text not null default 'inapp',
+  add column if not exists leida_en timestamptz;
+
+create index if not exists rsp_notificaciones_dip_fecha_idx
+  on public.rsp_notificaciones (destinatario_dip, fecha desc);
+
 alter table public.rsp_votaciones
   add column if not exists descripcion text not null default '',
   add column if not exists opciones jsonb not null default '["a_favor","en_contra","abstencion"]'::jsonb,
@@ -56,7 +156,15 @@ create index if not exists rsp_documentos_dip_estado_idx
 
 alter table public.plid_v27_legacy_credentials enable row level security;
 alter table public.plid_v27_legacy_auth_requests enable row level security;
+alter table public.rsp_votaciones enable row level security;
+alter table public.rsp_registro_votos enable row level security;
+alter table public.rsp_notificaciones enable row level security;
 alter table public.rsp_documentos enable row level security;
+
+revoke all on public.rsp_votaciones, public.rsp_registro_votos, public.rsp_notificaciones
+  from anon, authenticated;
+grant all on public.rsp_votaciones, public.rsp_registro_votos, public.rsp_notificaciones
+  to service_role;
 
 create or replace function public.plid_v27_legacy_cast_vote(
   p_votacion_id text,
