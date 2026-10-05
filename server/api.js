@@ -1199,14 +1199,24 @@ async function completeAuthorizedRequest(request, res) {
 
     const protectedFields = shareableConsentFields.filter((field) => app.scopes?.[field])
     if (protectedFields.length) {
-      const { data: consents, error: consentError } = await supabase.from('plid_v27_consents').select('field,status').eq('user_id', user.id).eq('app_id', app.id)
+      const { data: consents, error: consentError } = await supabase.from('plid_v27_consents')
+        .select('field,status,updated_at')
+        .eq('user_id', user.id)
+        .eq('app_id', app.id)
       if (consentError) throw consentError
-      const consentByField = new Map((consents || []).map((item) => [item.field, item.status]))
-      const missing = protectedFields.filter((field) => !consentByField.has(field))
-      if (missing.length) {
-        const { error: pendingError } = await supabase.from('plid_v27_consents').upsert(missing.map((field) => ({ user_id: user.id, app_id: app.id, field, status: 'pending', updated_at: new Date().toISOString() })), { onConflict: 'user_id,app_id,field', ignoreDuplicates: true })
+      const consentByField = new Map((consents || []).map((item) => [item.field, item]))
+      const requestCreatedAt = Date.parse(request.created_at || '')
+      const fieldsToReview = protectedFields.filter((field) => {
+        const consent = consentByField.get(field)
+        if (!consent) return true
+        if (consent.status === 'granted') return false
+        if (consent.status === 'denied' && Number.isFinite(requestCreatedAt) && Date.parse(consent.updated_at) >= requestCreatedAt) return false
+        return true
+      })
+      if (fieldsToReview.length) {
+        const { error: pendingError } = await supabase.from('plid_v27_consents').upsert(fieldsToReview.map((field) => ({ user_id: user.id, app_id: app.id, field, status: 'pending', updated_at: new Date().toISOString() })), { onConflict: 'user_id,app_id,field', ignoreDuplicates: true })
         if (pendingError) throw pendingError
-        return { stage: 'consent_required', requestId: request.id, app: { id: app.id, name: app.name }, fields: missing }
+        return { stage: 'consent_required', requestId: request.id, app: { id: app.id, name: app.name }, fields: fieldsToReview }
       }
     }
   }
