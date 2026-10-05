@@ -501,6 +501,11 @@ h1, h2, h3, p { margin-top: 0; }
 .modal-info svg { flex: 0 0 15px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .button-quiet { min-height: 34px; padding: 0 10px; border: 1px solid #e1e7e0; border-radius: 4px; background: white; color: #66746b; font-size: 9px; cursor: pointer; }
+.credential-management-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #e5ebe3; border-radius: 5px; background: #f8faf7; }
+.credential-management-row > div { display: grid; gap: 4px; min-width: 0; }
+.credential-management-row .field-help { margin: 0; }
+.credential-management-row > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; }
+.credential-management-row > button:disabled { cursor: not-allowed; opacity: .55; }
 .toast { position: fixed; z-index: 30; right: 22px; bottom: 20px; display: flex; align-items: center; gap: 8px; padding: 11px 14px; border: 1px solid #cfe1ce; border-radius: 5px; background: #f5faf3; color: #416c48; box-shadow: 0 8px 25px #1c392017; font-size: 10px; animation: appear .2s ease-out; }
 
 @media (max-width: 1230px) {

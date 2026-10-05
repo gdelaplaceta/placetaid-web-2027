@@ -350,6 +350,33 @@ api.post('/admin/apps', requireAdmin, async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+api.post('/admin/apps/:id/rotate-secret', requireAdmin, async (req, res) => {
+  const clientSecret = createRandomToken(32)
+  try {
+    const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
+      .select('id,client_id,name')
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (appError) throw appError
+    if (!app) return fail(res, 404, 'APP_NOT_FOUND', 'No se encontró la aplicación.')
+
+    const { error: updateError } = await supabase.from('plid_v27_integrations')
+      .update({ client_secret_hash: hashToken(clientSecret), updated_at: new Date().toISOString() })
+      .eq('id', app.id)
+    if (updateError) throw updateError
+
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      actor_user_id: null,
+      app_id: app.id,
+      event_type: 'integration_secret_rotated',
+      details: { clientId: app.client_id },
+    })
+    if (auditError) console.error('[PlacetaID API] No se pudo registrar la rotación del secreto:', auditError.code || auditError.message)
+
+    res.json({ clientId: app.client_id, clientSecret, auditWarning: Boolean(auditError) })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.patch('/admin/apps/:id', requireAdmin, async (req, res) => {
   const allowed = ['name', 'description', 'category', 'redirect_uris', 'status', 'min_age', 'allowed_roles', 'scopes', 'brand_color']
   const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)))
