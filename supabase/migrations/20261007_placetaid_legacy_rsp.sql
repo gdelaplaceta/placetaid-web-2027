@@ -161,10 +161,12 @@ alter table public.rsp_registro_votos enable row level security;
 alter table public.rsp_notificaciones enable row level security;
 alter table public.rsp_documentos enable row level security;
 
-revoke all on public.rsp_votaciones, public.rsp_registro_votos, public.rsp_notificaciones
-  from anon, authenticated;
-grant all on public.rsp_votaciones, public.rsp_registro_votos, public.rsp_notificaciones
-  to service_role;
+revoke all on public.plid_v27_legacy_credentials, public.plid_v27_legacy_auth_requests,
+  public.rsp_votaciones, public.rsp_registro_votos, public.rsp_notificaciones,
+  public.rsp_documentos from anon, authenticated;
+grant all on public.plid_v27_legacy_credentials, public.plid_v27_legacy_auth_requests,
+  public.rsp_votaciones, public.rsp_registro_votos, public.rsp_notificaciones,
+  public.rsp_documentos to service_role;
 
 create or replace function public.plid_v27_legacy_cast_vote(
   p_votacion_id text,
