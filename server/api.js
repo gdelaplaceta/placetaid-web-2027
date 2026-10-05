@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
+import bcrypt from 'bcryptjs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { supabase, supabaseReady } from './supabase.js'
 import { createRandomToken, encryptSecret, hashToken, isValidDip, normalizeDip, secureEquals, signSession, verifySession } from './security.js'
@@ -9,12 +10,15 @@ export const api = Router()
 
 const migrationTables = [
   ['plid_v27_integrations', 'status'],
+  ['plid_v27_integrations', 'logo_url'],
+  ['plid_v27_integrations', 'brand_color'],
   ['plid_v27_services', 'enabled'],
   ['plid_v27_devices', 'active'],
   ['plid_v27_authenticators', 'enabled'],
   ['plid_v27_user_security', 'status'],
   ['plid_v27_user_access', 'decision'],
   ['plid_v27_auth_requests', 'status'],
+  ['plid_v27_auth_requests', 'method'],
   ['plid_v27_sessions', 'expires_at'],
   ['plid_v27_consents', 'status'],
   ['plid_v27_oauth_codes', 'expires_at'],
@@ -176,6 +180,8 @@ function mapIntegration(row, services = []) {
     category: row.category,
     initials: row.initials,
     color: row.color,
+    logoUrl: row.logo_url || '',
+    brandColor: row.brand_color || '',
     status: row.status,
     minAge: row.min_age,
     roles: row.allowed_roles,
@@ -259,6 +265,7 @@ api.get('/health', async (_req, res) => {
     migrationRequired: missing.length > 0,
     missingTables: missing.map((item) => item.table),
     deviceBridgeConfigured: String(process.env.PLACETAID_V27_DEVICE_KEY || '').length >= 32,
+    passwordLoginEnabled: process.env.PLACETAID_V27_PASSWORD_LOGIN_ENABLED !== 'false',
   })
 })
 
@@ -302,6 +309,8 @@ api.post('/admin/apps', requireAdmin, async (req, res) => {
       category: String(req.body?.category || 'Ecosistema').slice(0, 80),
       initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
       color: 'violet',
+      logo_url: null,
+      brand_color: null,
       redirect_uris: redirectUris,
       allowed_roles: ['administrador', 'miembro'],
       status: 'pending',
@@ -327,7 +336,7 @@ api.post('/admin/apps', requireAdmin, async (req, res) => {
 })
 
 api.patch('/admin/apps/:id', requireAdmin, async (req, res) => {
-  const allowed = ['name', 'description', 'category', 'redirect_uris', 'status', 'min_age', 'allowed_roles', 'scopes']
+  const allowed = ['name', 'description', 'category', 'redirect_uris', 'status', 'min_age', 'allowed_roles', 'scopes', 'brand_color']
   const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)))
   patch.updated_at = new Date().toISOString()
   try {
@@ -335,6 +344,43 @@ api.patch('/admin/apps/:id', requireAdmin, async (req, res) => {
     if (error) throw error
     if (!data) return fail(res, 404, 'APP_NOT_FOUND', 'No se encontró la aplicación.')
     await supabase.from('plid_v27_audit').insert({ actor_user_id: null, app_id: data.id, event_type: 'integration_policy_updated', details: { fields: Object.keys(patch).filter((key) => key !== 'updated_at') } })
+    res.json(mapIntegration(data))
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/admin/apps/:id/logo', requireAdmin, async (req, res) => {
+  const contentType = String(req.body?.contentType || '')
+  const encoded = String(req.body?.data || '')
+  const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
+  if (!allowedTypes.has(contentType) || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(encoded)) {
+    return fail(res, 400, 'INVALID_APP_LOGO', 'El logo debe ser PNG, JPEG o WebP.')
+  }
+  const image = Buffer.from(encoded.slice(encoded.indexOf(',') + 1), 'base64')
+  if (!image.length || image.length > 1024 * 1024) return fail(res, 413, 'APP_LOGO_TOO_LARGE', 'El logo no puede superar 1 MB.')
+  try {
+    const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
+      .select('id')
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (appError) throw appError
+    if (!app) return fail(res, 404, 'APP_NOT_FOUND', 'No se encontró la aplicación.')
+    const extension = contentType === 'image/jpeg' ? 'jpg' : contentType.split('/')[1]
+    const path = `${app.id}/logo.${extension}`
+    const { error: uploadError } = await supabase.storage.from('plid27-app-logos').upload(path, image, {
+      contentType,
+      upsert: true,
+      cacheControl: '3600',
+    })
+    if (uploadError) throw uploadError
+    const { data: publicUrl } = supabase.storage.from('plid27-app-logos').getPublicUrl(path)
+    const logoUrl = `${publicUrl.publicUrl}?v=${Date.now()}`
+    const brandColor = /^#[\da-f]{6}$/i.test(String(req.body?.brandColor || '')) ? req.body.brandColor : null
+    const { data, error: updateError } = await supabase.from('plid_v27_integrations')
+      .update({ logo_url: logoUrl, brand_color: brandColor, updated_at: new Date().toISOString() })
+      .eq('id', app.id)
+      .select('*')
+      .single()
+    if (updateError) throw updateError
     res.json(mapIntegration(data))
   } catch (error) { handleDbError(res, error) }
 })
@@ -692,7 +738,7 @@ api.post('/public/identify', authLimiter, async (req, res) => {
     if (authenticatorError) throw authenticatorError
     const sessions = new Set((devices || []).map((row) => row.method))
     const method = sessions.has('mobile') ? 'mobile' : authenticator?.enabled && sessions.has('authenticator') ? 'authenticator' : sessions.has('desktop') ? 'desktop' : null
-    if (!method) return fail(res, 409, 'NO_ACTIVE_METHOD', 'No hay un método de identificación activo. Abre PlacetaID Móvil, inicia sesión con las credenciales de tu cuenta y vincula el dispositivo; después vuelve a intentarlo.')
+    if (!method) return fail(res, 409, 'NO_ACTIVE_METHOD', 'No hay un método de identificación activo. Puedes usar temporalmente tu contraseña de PlacetaID o vincular un dispositivo.')
 
     const confirmationCode = randomBytes(4).toString('hex').toUpperCase()
     const { data: request, error: requestError } = await supabase.from('plid_v27_auth_requests').insert({
@@ -718,6 +764,7 @@ api.post('/public/identify', authLimiter, async (req, res) => {
         fecha: new Date().toISOString(),
         canal: 'inapp',
       })
+
       if (notificationError) {
         const { error: cleanupError } = await supabase.from('plid_v27_auth_requests')
           .delete().eq('id', request.id).eq('status', 'pending')
@@ -744,6 +791,102 @@ api.post('/public/identify', authLimiter, async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+api.post('/public/password-authenticate', authLimiter, async (req, res) => {
+  if (process.env.PLACETAID_V27_PASSWORD_LOGIN_ENABLED === 'false') {
+    return fail(res, 403, 'PASSWORD_LOGIN_DISABLED', 'El acceso temporal con contraseña está desactivado.')
+  }
+  const dip = normalizeDip(req.body?.dip)
+  const password = String(req.body?.password || '')
+  if (!isValidDip(dip) || !password || password.length > 256) return fail(res, 400, 'INVALID_CREDENTIALS', 'Introduce tu DIP y contraseña de PlacetaID.')
+  try {
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,dip,estado,lista_negra')
+      .eq('dip', dip)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user || Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) {
+      return fail(res, 401, 'INVALID_CREDENTIALS', 'El DIP o la contraseña no son correctos.')
+    }
+    const { data: credential, error: credentialError } = await supabase.from('plid_v27_legacy_credentials')
+      .select('password_hash')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (credentialError) throw credentialError
+    if (!credential || !await bcrypt.compare(password, credential.password_hash)) {
+      return fail(res, 401, 'INVALID_CREDENTIALS', 'El DIP o la contraseña no son correctos.')
+    }
+
+    let request = null
+    if (req.body?.requestId) {
+      const { data: existing, error: requestError } = await supabase.from('plid_v27_auth_requests')
+        .select('*')
+        .eq('id', String(req.body.requestId))
+        .maybeSingle()
+      if (requestError) throw requestError
+      if (!existing || existing.user_id !== user.id || existing.status !== 'pending' || Date.parse(existing.expires_at) <= Date.now()) {
+        return fail(res, 410, 'REQUEST_EXPIRED', 'La solicitud ha caducado. Empieza de nuevo.')
+      }
+      const { data: authorized, error: updateError } = await supabase.from('plid_v27_auth_requests')
+        .update({ method: 'password', status: 'authorized', completed_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .select('*')
+        .maybeSingle()
+      if (updateError) throw updateError
+      if (!authorized) return fail(res, 409, 'REQUEST_ALREADY_PROCESSED', 'La solicitud ya se ha procesado. Inicia un nuevo acceso.')
+      request = authorized
+    } else {
+      let app = null
+      let service = null
+      if (req.body?.clientId) {
+        const { data, error: appError } = await supabase.from('plid_v27_integrations')
+          .select('*')
+          .eq('client_id', req.body.clientId)
+          .eq('status', 'authorized')
+          .maybeSingle()
+        if (appError) throw appError
+        app = data
+        if (!app || !isAllowedRedirectUri(req.body.redirectUri) || !Array.isArray(app.redirect_uris) || !app.redirect_uris.includes(req.body.redirectUri)) {
+          return fail(res, 403, 'APP_NOT_AUTHORIZED', 'La aplicación solicitante o su redirect_uri no están autorizados.')
+        }
+        let serviceQuery = supabase.from('plid_v27_services').select('*').eq('app_id', app.id).eq('enabled', true)
+        serviceQuery = req.body.serviceKey
+          ? serviceQuery.eq('service_key', String(req.body.serviceKey))
+          : serviceQuery.order('created_at').limit(1)
+        const { data: serviceData, error: serviceError } = await serviceQuery.maybeSingle()
+        if (serviceError) throw serviceError
+        service = serviceData
+        if (!service) return fail(res, 403, 'SERVICE_NOT_AVAILABLE', 'El servicio solicitado no está disponible.')
+      }
+      const { data, error: requestError } = await supabase.from('plid_v27_auth_requests').insert({
+        request_code: randomBytes(4).toString('hex').toUpperCase(),
+        user_id: user.id,
+        app_id: app?.id ?? null,
+        service_id: service?.id ?? null,
+        method: 'password',
+        status: 'authorized',
+        state: String(req.body?.state || '').slice(0, 300) || null,
+        redirect_uri: app ? req.body.redirectUri : null,
+        completed_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      }).select('*').single()
+      if (requestError) throw requestError
+      request = data
+    }
+
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      actor_user_id: user.id,
+      target_user_id: user.id,
+      app_id: request.app_id,
+      event_type: 'identity_authenticated',
+      details: { method: 'password', temporary: true },
+    })
+    if (auditError) throw auditError
+    res.json(await completeAuthorizedRequest(request, res))
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.get('/public/authorize/preview', authLimiter, async (req, res) => {
   const clientId = String(req.query.client_id || '')
   const redirectUri = String(req.query.redirect_uri || '')
@@ -753,7 +896,7 @@ api.get('/public/authorize/preview', authLimiter, async (req, res) => {
   }
   try {
     const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
-      .select('id,name,description,category,initials,color,redirect_uris,status,min_age,allowed_roles,scopes')
+      .select('id,name,description,category,initials,color,logo_url,brand_color,redirect_uris,status,min_age,allowed_roles,scopes')
       .eq('client_id', clientId)
       .eq('status', 'authorized')
       .maybeSingle()
@@ -776,7 +919,7 @@ api.get('/public/authorize/preview', authLimiter, async (req, res) => {
     const serviceRoles = Array.isArray(service.allowed_roles) ? service.allowed_roles : appRoles
     const allowedRoles = appRoles.filter((role) => serviceRoles.includes(role))
     res.json({
-      app: { name: app.name, description: app.description, category: app.category, initials: app.initials, color: app.color },
+      app: { name: app.name, description: app.description, category: app.category, initials: app.initials, color: app.color, logoUrl: app.logo_url || '', brandColor: app.brand_color || '' },
       service: { name: service.name, description: service.description },
       destination: redirectUri,
       requirements: {

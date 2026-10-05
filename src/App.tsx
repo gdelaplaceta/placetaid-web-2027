@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   Activity,
   AppWindow,
@@ -43,11 +43,11 @@ type View = 'home' | 'applications' | 'users' | 'permissions' | 'gateway' | 'myP
 type ProtectedField = 'dip' | 'email' | 'phone' | 'photo' | 'identityVerified'
 type UserStatus = 'active' | 'pending' | 'restricted' | 'suspended' | 'closed'
 type ConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked'
-type GatewayStage = 'entry' | 'detected' | 'legal' | 'consent' | 'authenticated'
+type GatewayStage = 'entry' | 'password' | 'detected' | 'legal' | 'consent' | 'authenticated'
 type LegalDocument = 'terms' | 'privacy'
-type GatewayMethod = 'mobile' | 'authenticator' | 'desktop'
+type GatewayMethod = 'mobile' | 'authenticator' | 'desktop' | 'password'
 type GatewayPreview = {
-  app: { name: string; description: string; category: string; initials: string; color: string }
+  app: { name: string; description: string; category: string; initials: string; color: string; logoUrl?: string; brandColor?: string }
   service: { name: string; description: string }
   destination: string
   requirements: { minAge: number; allowedRoles: Role[]; activeAccount: boolean; linkedMethod: boolean }
@@ -92,6 +92,8 @@ type Integration = {
   category: string
   initials: string
   color: string
+  logoUrl?: string
+  brandColor?: string
   status: IntegrationStatus
   minAge: AgeLimit
   roles: Role[]
@@ -310,6 +312,48 @@ function calculateAge(birthDate: string) {
   return today.getFullYear() - birth.getFullYear() - (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate()) ? 1 : 0)
 }
 
+async function encodeApplicationLogo(file: File) {
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('El logo debe ser PNG, JPEG o WebP.')
+  if (file.size > 1024 * 1024) throw new Error('El logo no puede superar 1 MB.')
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('No se pudo leer el logo.'))
+    reader.onerror = () => reject(new Error('No se pudo leer el logo.'))
+    reader.readAsDataURL(file)
+  })
+  const image = new Image()
+  image.src = data
+  await image.decode()
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 32
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('No se pudo analizar el color del logo.')
+  context.drawImage(image, 0, 0, 32, 32)
+  const pixels = context.getImageData(0, 0, 32, 32).data
+  const colors = new Map<string, { red: number; green: number; blue: number; count: number }>()
+  for (let index = 0; index < pixels.length; index += 4) {
+    const alpha = pixels[index + 3]
+    const r = pixels[index]
+    const g = pixels[index + 1]
+    const b = pixels[index + 2]
+    if (alpha < 100 || Math.max(r, g, b) - Math.min(r, g, b) < 28 || Math.max(r, g, b) > 245) continue
+    const red = Math.round(r / 32) * 32
+    const green = Math.round(g / 32) * 32
+    const blue = Math.round(b / 32) * 32
+    const key = `${red},${green},${blue}`
+    const current = colors.get(key)
+    colors.set(key, { red, green, blue, count: (current?.count || 0) + 1 })
+  }
+  const dominant = [...colors.values()].sort((left, right) => right.count - left.count)[0]
+  const dominantChannels = dominant ? [dominant.red, dominant.green, dominant.blue] : []
+  const brightnessScale = dominant ? Math.min(1, 170 / Math.max(...dominantChannels)) : 1
+  const color = dominant
+    ? `#${dominantChannels.map((part) => Math.round(part * brightnessScale).toString(16).padStart(2, '0')).join('')}`
+    : '#6d28d9'
+  return { data, contentType: file.type, brandColor: color }
+}
+
 function App() {
   const [integrations, setIntegrations] = useState(() => readStored('plid27.v27.integrations', initialIntegrations))
   const [audit, setAudit] = useState(() => readStored('plid27.v27.audit', initialAudit))
@@ -326,6 +370,7 @@ function App() {
   const [newAppCategory, setNewAppCategory] = useState('Ecosistema')
   const [newAppRedirectUri, setNewAppRedirectUri] = useState('')
   const [newAppDescription, setNewAppDescription] = useState('')
+  const [newAppLogo, setNewAppLogo] = useState<File | null>(null)
   const [newAppCredential, setNewAppCredential] = useState<{ clientId: string; clientSecret: string } | null>(null)
   const [newAppError, setNewAppError] = useState('')
   const [creatingApp, setCreatingApp] = useState(false)
@@ -342,6 +387,7 @@ function App() {
   const [gatewayError, setGatewayError] = useState('')
   const [gatewayNeedsEnrollment, setGatewayNeedsEnrollment] = useState(false)
   const [gatewayOtp, setGatewayOtp] = useState('')
+  const [gatewayPassword, setGatewayPassword] = useState('')
   const [gatewayRequestId, setGatewayRequestId] = useState('')
   const [gatewayConfirmationCode, setGatewayConfirmationCode] = useState('')
   const [gatewayMethod, setGatewayMethod] = useState<GatewayMethod | null>(null)
@@ -362,6 +408,7 @@ function App() {
   const [adminSyncing, setAdminSyncing] = useState(false)
   const [supabaseStatus, setSupabaseStatus] = useState<'checking' | 'ready' | 'migration' | 'offline'>('checking')
   const [deviceBridgeConfigured, setDeviceBridgeConfigured] = useState(false)
+  const [passwordLoginEnabled, setPasswordLoginEnabled] = useState(true)
 
   useEffect(() => localStorage.setItem('plid27.v27.integrations', JSON.stringify(integrations)), [integrations])
   useEffect(() => localStorage.setItem('plid27.v27.audit', JSON.stringify(audit)), [audit])
@@ -373,6 +420,7 @@ function App() {
         if (active) {
           setSupabaseStatus(status.ok ? 'ready' : status.migrationRequired ? 'migration' : 'offline')
           setDeviceBridgeConfigured(status.deviceBridgeConfigured === true)
+          setPasswordLoginEnabled(status.passwordLoginEnabled !== false)
         }
       })
       .catch(() => { if (active) setSupabaseStatus('offline') })
@@ -502,6 +550,22 @@ function App() {
     } catch {
       showToast(`No se pudo copiar ${label.toLowerCase()}`)
     }
+  }
+
+  async function uploadApplicationLogo(appId: string, file: File) {
+    const logo = await encodeApplicationLogo(file)
+    const response = await fetch(`/api/admin/apps/${encodeURIComponent(appId)}/logo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify(logo),
+    })
+    const payload = await response.json()
+    if (!response.ok) throw new Error(payload.message || 'No se pudo guardar el logo de la aplicación.')
+    const updated = payload as Integration
+    setIntegrations((current) => current.map((app) => app.id === appId
+      ? { ...app, logoUrl: updated.logoUrl, brandColor: updated.brandColor, updated: 'Ahora' }
+      : app))
+    return updated
   }
 
   function updateIntegration(id: string, update: (item: Integration) => Integration) {
@@ -663,8 +727,15 @@ function App() {
       const payload: GatewayResponse = await response.json()
       if (!response.ok) {
         if (payload.error === 'NO_ACTIVE_METHOD') {
-          setGatewayNeedsEnrollment(true)
-          setGatewayError('Esta cuenta aún no tiene un método v27 activo. Vincula PlacetaID Móvil o Desktop para continuar.')
+          if (passwordLoginEnabled) {
+            setGatewayPassword('')
+            setGatewayStage('password')
+            setGatewayMethod('password')
+            setGatewayError('No hay un método vinculado activo. Puedes iniciar sesión temporalmente con la contraseña de PlacetaID.')
+          } else {
+            setGatewayNeedsEnrollment(true)
+            setGatewayError('No hay un método activo. Vincula PlacetaID Móvil o Desktop para continuar.')
+          }
         } else {
           setGatewayError(payload.message || 'No se pudo iniciar la autenticación.')
         }
@@ -686,6 +757,7 @@ function App() {
       setPrivacyAccepted(false)
       setLegalDocument(null)
       setGatewayStage('detected')
+      setGatewayPassword('')
     } catch {
       setGatewayError('No se pudo contactar con PlacetaID. Comprueba que la API esté activa.')
     } finally {
@@ -739,6 +811,7 @@ function App() {
       setGatewayError('No hay una solicitud de autenticación activa. Vuelve a introducir tu DIP.')
       return
     }
+
     if (gatewayMethod === 'authenticator' && !/^\d{6}$/.test(gatewayOtp)) {
       setGatewayError('Introduce el código de seis cifras del Autentificador.')
       return
@@ -777,6 +850,46 @@ function App() {
       setGatewayError('La solicitud ha caducado o no fue aprobada. Vuelve a iniciar el acceso para generar otra.')
     } catch {
       setGatewayError('No se pudo completar la autenticación con el servidor.')
+    } finally {
+      setGatewayBusy(false)
+    }
+  }
+
+  async function submitGatewayPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const dip = gatewayDip.replace(/[\s-]/g, '').toUpperCase()
+    if (!gatewayPassword) {
+      setGatewayError('Introduce la contraseña de tu cuenta PlacetaID.')
+      return
+    }
+    setGatewayBusy(true)
+    setGatewayError('')
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const response = await fetch('/api/public/password-authenticate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dip,
+          password: gatewayPassword,
+          requestId: gatewayRequestId || undefined,
+          ...(initialGatewayRequest.bound ? {
+            clientId: params.get('client_id') || params.get('clientId'),
+            redirectUri: initialGatewayRequest.redirectUri,
+            serviceKey: initialGatewayRequest.serviceKey || undefined,
+            state: params.get('state') || undefined,
+          } : {}),
+        }),
+      })
+      const payload: GatewayResponse = await response.json()
+      if (!response.ok) {
+        setGatewayError(payload.message || 'No se pudo validar la contraseña.')
+        return
+      }
+      setGatewayPassword('')
+      await processGatewayResponse(payload)
+    } catch {
+      setGatewayError('No se pudo conectar con PlacetaID para validar la contraseña.')
     } finally {
       setGatewayBusy(false)
     }
@@ -925,6 +1038,13 @@ function App() {
       setIntegrations((current) => [item, ...current.filter((existing) => existing.id !== item.id)])
       setSelectedId(item.id)
       setNewAppCredential({ clientId: item.clientId || '', clientSecret: payload.clientSecret })
+      if (newAppLogo) {
+        try {
+          await uploadApplicationLogo(item.id, newAppLogo)
+        } catch (error) {
+          setNewAppError(error instanceof Error ? error.message : 'La aplicación se creó, pero no se pudo guardar su logo.')
+        }
+      }
       setStatusFilter('all')
       addAudit('Nueva solicitud de integración guardada en Supabase', name)
       showToast('Aplicación creada en Supabase')
@@ -1024,7 +1144,7 @@ function App() {
 
       <main className={isPublicView ? 'public-main' : 'main-area'}>
         {isPublicView ? <>
-          <header className="public-topbar"><button className="public-brand" onClick={() => setView('gateway')}><span className="brand-mark"><Fingerprint size={21} /></span><span><strong>placeta<span>id</span></strong><small>IDENTIDAD DIGITAL</small></span></button><div className="public-topbar-actions">{view === 'myPermissions' && <button className="public-action" onClick={() => setView('gateway')}><ArrowRight className="back-arrow" size={15} />Pasarela</button>}{gatewayStage === 'authenticated' && gatewayUser && view === 'gateway' && <button className="public-action" onClick={() => setView('myPermissions')}><LockKeyhole size={15} />Mis permisos</button>}{gatewayStage === 'authenticated' && gatewayUser && <button className="public-action" onClick={() => void logoutGatewayUser()}>Cerrar sesión</button>}<button className="admin-entry" onClick={() => setView('applications')}><LockKeyhole size={14} />Administración</button></div></header>
+          <header className="public-topbar"><button className="public-brand" onClick={() => setView('gateway')}><span className="brand-mark"><Fingerprint size={21} /></span><span><strong>placeta<span>id</span></strong><small>IDENTIDAD DIGITAL</small></span></button>{view === 'gateway' && initialGatewayRequest.bound && gatewayPreview?.app.logoUrl && <span className="public-requesting-app" title={`Aplicación solicitante: ${gatewayPreview.app.name}`}><span>solicita acceso</span><img src={gatewayPreview.app.logoUrl} alt={`Logo de ${gatewayPreview.app.name}`} /></span>}<div className="public-topbar-actions">{view === 'myPermissions' && <button className="public-action" onClick={() => setView('gateway')}><ArrowRight className="back-arrow" size={15} />Pasarela</button>}{gatewayStage === 'authenticated' && gatewayUser && view === 'gateway' && <button className="public-action" onClick={() => setView('myPermissions')}><LockKeyhole size={15} />Mis permisos</button>}{gatewayStage === 'authenticated' && gatewayUser && <button className="public-action" onClick={() => void logoutGatewayUser()}>Cerrar sesión</button>}<button className="admin-entry" onClick={() => setView('applications')}><LockKeyhole size={14} />Administración</button></div></header>
         </> : <>
           <header className="topbar">
             <div className="breadcrumbs"><span>PlacetaID</span><ChevronRight size={14} /><strong>{{ applications: 'Aplicaciones', users: 'Usuarios', permissions: 'Permisos personales', gateway: 'Pasarela DIP', myPermissions: 'Mis permisos', simulator: 'Simulador de acceso', activity: 'Registro de actividad' }[view]}</strong></div>
@@ -1064,7 +1184,7 @@ function App() {
 
                 <div className="integration-table-wrap"><table className="integration-table"><thead><tr><th>APLICACIÓN</th><th>ESTADO</th><th>ACCESO</th><th>SERVICIOS</th><th aria-label="Abrir detalle" /></tr></thead><tbody>
                   {visibleIntegrations.map((item) => <tr key={item.id} className={selected?.id === item.id ? 'selected-row' : ''} onClick={() => setSelectedId(item.id)}>
-                    <td><button className="app-name-cell" onClick={() => setSelectedId(item.id)}><span className={`app-mark app-mark-${item.color}`}>{item.initials}</span><span className="app-cell-copy"><strong>{item.name}</strong><small>{item.category}</small></span></button></td>
+                    <td><button className="app-name-cell" onClick={() => setSelectedId(item.id)}><span className={`app-mark app-mark-${item.color}`}>{item.logoUrl ? <img src={item.logoUrl} alt="" /> : item.initials}</span><span className="app-cell-copy"><strong>{item.name}</strong><small>{item.category}</small></span></button></td>
                     <td><span className={`status-badge status-${item.status}`}><i />{statusLabel(item.status)}</span></td>
                     <td><span className="age-cell"><span className="age-dot" />{ageLabel(item.minAge)}</span></td>
                     <td><span className="services-count">{item.services.filter((service) => service.enabled).length}<span> / {item.services.length}</span></span></td>
@@ -1105,7 +1225,8 @@ function App() {
                   <small className="field-help">La aplicación abre la pasarela v27; su servidor canjea el código de un solo uso.</small>
                 </div>
                 <div className="policy-topline"><span className="eyebrow">FICHA DE INTEGRACIÓN</span><button className="more-button" aria-label="Más opciones" onClick={() => showToast('No hay más acciones disponibles en la vista previa')}><span /><span /><span /></button></div>
-                <div className="policy-app-heading"><span className={`app-mark app-mark-large app-mark-${selected.color}`}>{selected.initials}</span><div><h2>{selected.name}</h2><span>{selected.category} <span className="separator-dot">·</span> ID {selected.id.toUpperCase()}</span></div></div>
+                <div className="policy-app-heading"><span className={`app-mark app-mark-large app-mark-${selected.color}`}>{selected.logoUrl ? <img src={selected.logoUrl} alt="" /> : selected.initials}</span><div><h2>{selected.name}</h2><span>{selected.category} <span className="separator-dot">·</span> ID {selected.id.toUpperCase()}</span></div></div>
+                <label className="app-logo-upload"><span>{selected.logoUrl ? <img src={selected.logoUrl} alt="" /> : <ImageIcon size={18} />}</span><span><strong>{selected.logoUrl ? 'Cambiar logo' : 'Subir logo de la aplicación'}</strong><small>PNG, JPEG o WebP · máximo 1 MB</small></span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadApplicationLogo(selected.id, file).then(() => showToast('Logo de aplicación actualizado')).catch((error) => showToast(error instanceof Error ? error.message : 'No se pudo subir el logo')); event.currentTarget.value = '' }} /></label>
                 <div className="authorization-row"><div><strong>{selected.status === 'authorized' ? 'Integración autorizada' : selected.status === 'pending' ? 'Solicitud pendiente' : 'Integración desactivada'}</strong><small>{selected.status === 'authorized' ? 'Puede iniciar el flujo de acceso' : selected.status === 'pending' ? 'Aún no puede iniciar sesión' : 'El acceso está bloqueado para todos'}</small></div><button className={`switch ${selected.status === 'authorized' ? 'switch-on' : ''}`} role="switch" aria-checked={selected.status === 'authorized'} aria-label="Autorizar aplicación" onClick={() => toggleStatus(selected)}><span /></button></div>
 
                 <div className="policy-section"><div className="policy-section-heading"><div><h3>Reglas de acceso</h3><p>La aplicación y sus servicios</p></div><LockKeyhole size={16} /></div>
@@ -1171,14 +1292,14 @@ function App() {
           {gatewayUser ? <section className="my-permissions-panel"><div className="consent-owner"><span className="user-avatar">{gatewayUser.name.slice(0, 1)}{gatewayUser.surname.slice(0, 1)}</span><div><strong>{gatewayUser.name} {gatewayUser.surname}</strong><small>{gatewayUser.placeid} · Identidad verificada en PlacetaID</small></div><span>{personalPermissionRows.filter((row) => row.record?.status === 'granted' && isShareableConsentField(row.scope.id)).length} concedidos</span></div><div className="my-permission-list">{personalPermissionRows.map(({ app, scope, record }) => <article className="my-permission-row" key={`${app.id}-${scope.id}`}><span className={`consent-field-icon consent-field-${scope.id}`}>{scope.id === 'dip' ? <Fingerprint size={17} /> : scope.id === 'email' ? <Mail size={17} /> : scope.id === 'phone' ? <Phone size={17} /> : scope.id === 'photo' ? <ImageIcon size={17} /> : <BadgeCheck size={17} />}</span><span className="my-permission-copy"><strong>{app.name}</strong><span>{scope.label}</span><small>{!isShareableConsentField(scope.id) ? 'Este dato no se comparte en el flujo actual.' : record ? `Actualizado ${record.updated}` : 'Este permiso todavía no ha sido concedido.'}</small></span><span className={`consent-status consent-${record?.status ?? 'revoked'}`}>{!isShareableConsentField(scope.id) ? 'No disponible' : record ? consentStatusLabel(record.status) : 'No concedido'}</span>{record?.status === 'granted' ? <button className="button-quiet revoke-button" onClick={() => updateConsent(gatewayUser.id, app.id, scope.id, 'revoked')}>Revocar</button> : !isShareableConsentField(scope.id) ? null : !record || record.status === 'denied' || record.status === 'revoked' ? <button className="button-quiet" disabled={!app.scopes[scope.id] || app.status !== 'authorized'} onClick={() => requestConsent(gatewayUser.id, app.id, scope.id)}>Solicitar permiso</button> : <span className="admin-pending-note">Solicitud pendiente</span>}</article>)}</div><div className="permission-principle"><ShieldCheck size={16} /><span><strong>Tu decisión es independiente por aplicación y dato.</strong> Si revocas un permiso, ese dato deja de incluirse en las siguientes respuestas de PlacetaID.</span></div></section> : <section className="my-permissions-panel my-permissions-locked"><LockKeyhole size={20} /><strong>Identifícate para revisar tus permisos</strong><button className="button-primary" onClick={() => setView('gateway')}>Ir a la pasarela <ArrowRight size={14} /></button></section>}
         </div>}
 
-        {view === 'gateway' && <div className="page-content gateway-page" data-gateway-stage={gatewayStage}>
+        {view === 'gateway' && <div className="page-content gateway-page" data-gateway-stage={gatewayStage} style={{ '--gateway-brand': gatewayStage === 'entry' ? gatewayPreview?.app.brandColor || '#6d28d9' : '#6d28d9' } as CSSProperties}>
           <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />AUTENTICACIÓN SEGURA</div><h1>{gatewayPreview ? `Acceso a ${gatewayPreview.app.name}` : 'Accede con PlacetaID'}</h1><p>Tu DIP localiza la identidad. El acceso se confirma con un método vinculado a tu cuenta.</p></div><span className={`simulator-tag system-${supabaseStatus}`}><Fingerprint size={14} />{supabaseStatus === 'ready' ? 'SERVICIO DISPONIBLE' : 'SERVICIO NO DISPONIBLE'}</span></section>
           {initialGatewayRequest.bound && <section className="gateway-request-card" aria-label="Detalles de la solicitud">
             {gatewayPreviewLoading ? <div className="gateway-preview-state"><span className="loading-spinner" /><span>Verificando la aplicación y sus permisos…</span></div>
               : gatewayPreviewError ? <div className="gateway-preview-state gateway-preview-error"><ShieldAlert size={18} /><div><strong>Solicitud no verificada</strong><span>{gatewayPreviewError}</span></div></div>
                 : gatewayPreview && <>
                   <div className="gateway-request-heading">
-                    <span className={`gateway-app-mark app-mark-${gatewayPreview.app.color}`}>{gatewayPreview.app.initials}</span>
+                    <span className={`gateway-app-mark app-mark-${gatewayPreview.app.color}`}>{gatewayPreview.app.logoUrl ? <img src={gatewayPreview.app.logoUrl} alt="" /> : gatewayPreview.app.initials}</span>
                     <div className="gateway-app-copy"><span className="gateway-verified-label"><ShieldCheck size={12} />APLICACIÓN VERIFICADA</span><h2>{gatewayPreview.app.name}</h2><p>{gatewayPreview.app.description || gatewayPreview.app.category}</p></div>
                     <span className="gateway-request-badge"><LockKeyhole size={13} />Acceso seguro</span>
                   </div>
@@ -1201,7 +1322,7 @@ function App() {
           </section>}
           <div className="gateway-layout">
             <section className="gateway-flow-panel">
-              <h1 className="gateway-wordmark">PlacetaID</h1>
+              <div className="gateway-wordmark-row"><h1 className="gateway-wordmark">PlacetaID</h1></div>
               <p className="gateway-tagline">Una identidad, acceso seguro</p>
               <div className="gateway-step-heading"><span className={`step-number ${gatewayStage !== 'entry' ? 'step-complete' : ''}`}>{gatewayStage === 'entry' ? '01' : <Check size={13} />}</span><div><h2>Identifica tu cuenta</h2><p>Introduce el DIP asociado a PlacetaID.</p></div></div>
               {gatewayStage === 'entry' && <form className="gateway-form" onSubmit={submitGatewayDip}>
@@ -1223,7 +1344,18 @@ function App() {
                 {gatewayMethod === 'authenticator' && <><label className="field-label gateway-otp-label" htmlFor="gateway-otp">Código de seis cifras</label><input className="gateway-otp-input" id="gateway-otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={gatewayOtp} onChange={(event) => { setGatewayOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setGatewayError('') }} placeholder="000000" /></>}
                 {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
                 <button className="button-primary gateway-continue" disabled={gatewayBusy} onClick={confirmGatewayIdentity}>{gatewayBusy ? 'Esperando confirmación segura…' : gatewayMethod === 'authenticator' ? 'Verificar código' : 'Esperar aprobación del dispositivo'} <ArrowRight size={15} /></button>
+                {passwordLoginEnabled && <button className="gateway-password-link" type="button" onClick={() => { setGatewayPassword(''); setGatewayError(''); setGatewayStage('password') }}>Usar temporalmente mi contraseña de PlacetaID</button>}
               </div>}
+              {gatewayStage === 'password' && passwordLoginEnabled && <form className="gateway-form gateway-password-form" onSubmit={submitGatewayPassword}>
+                <div className="gateway-step-heading"><span className="step-number">02</span><div><h2>Confirma que eres tú</h2><p>Acceso temporal con la contraseña de tu cuenta PlacetaID.</p></div></div>
+                <label className="field-label" htmlFor="gateway-password">Contraseña de PlacetaID</label>
+                <input id="gateway-password" className="gateway-password-input" type="password" value={gatewayPassword} onChange={(event) => { setGatewayPassword(event.target.value); setGatewayError('') }} autoComplete="current-password" maxLength={256} required />
+                <p className="gateway-input-note"><LockKeyhole size={13} />La contraseña solo se usa para esta comprobación; nunca se comparte con la aplicación solicitante.</p>
+                {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+                <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || !gatewayPassword}>{gatewayBusy ? 'Verificando…' : 'Confirmar identidad'} <ArrowRight size={15} /></button>
+                {gatewayRequestId && <button className="gateway-password-link" type="button" onClick={() => { setGatewayStage('detected'); setGatewayPassword(''); setGatewayError('') }}>Volver a PlacetaID {gatewayMethod === 'desktop' ? 'Desktop' : gatewayMethod === 'authenticator' ? 'Autentificador' : 'Móvil'}</button>}
+                <small className="gateway-password-temporary-note">Método temporal mientras terminas de vincular PlacetaID Móvil o Desktop.</small>
+              </form>}
               {gatewayStage === 'legal' && <div className="legal-consent-step">
                 <div className="gateway-step-heading"><span className="step-number">03</span><div><h2>Revisa los documentos</h2><p>La aceptación se registrará en Supabase.</p></div></div>
                 <div className="legal-document-links"><button onClick={() => setLegalDocument('terms')}><ShieldCheck size={16} /><span><strong>Términos y condiciones</strong><small>Uso de la identidad y acceso a servicios</small></span><ArrowRight size={14} /></button><button onClick={() => setLegalDocument('privacy')}><LockKeyhole size={16} /><span><strong>Política de privacidad</strong><small>Datos utilizados y control del titular</small></span><ArrowRight size={14} /></button></div>
@@ -1296,7 +1428,7 @@ function App() {
         {isPublicView ? <footer className="public-footer"><span>PlacetaID v27.0 <i>·</i> Plan 2027 · Ámbito 25</span><span>Identidad digital segura</span></footer> : <footer className="app-footer"><span><span className="footer-mark"><Fingerprint size={13} /></span>PlacetaID v27.0 <span className="footer-dot">·</span> Gobierno de identidad</span><span>Panel de Administración <span className="footer-dot">·</span> Vista previa</span></footer>}
       </main>
 
-      {newAppOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingApp) setNewAppOpen(false) }}><form className="integration-modal" onSubmit={addIntegration}><div className="modal-topline"><span className="modal-icon"><Plus size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" onClick={() => setNewAppOpen(false)}><X size={17} /></button></div><h2>{newAppCredential ? 'Aplicación registrada' : 'Nueva integración'}</h2><p>{newAppCredential ? 'Las credenciales se muestran ahora una sola vez. Guárdalas en el backend seguro de tu aplicación.' : 'La solicitud se guardará en Supabase y recibirá un client_id real.'}</p>{newAppCredential ? <div className="created-credentials"><label className="field-label" htmlFor="created-client-id">Client ID</label><div className="credential-value"><code id="created-client-id">{newAppCredential.clientId}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientId)}>Copiar</button></div><label className="field-label" htmlFor="created-client-secret">Client secret · una sola vez</label><div className="credential-value"><code id="created-client-secret">{newAppCredential.clientSecret}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientSecret)}>Copiar</button></div><div className="modal-info"><ShieldAlert size={15} /><span>No lo incluyas en JavaScript del navegador, repositorios ni URLs. Guárdalo como secreto del servidor. El acceso seguirá pendiente hasta que Administración lo autorice.</span></div><div className="modal-actions"><button className="button-primary" type="button" onClick={() => { setNewAppOpen(false); setNewAppCredential(null); setNewAppName(''); setNewAppDescription(''); setNewAppRedirectUri('') }}>He guardado las credenciales</button></div></div> : <><label className="field-label" htmlFor="new-app-name">Nombre de la aplicación</label><input className="modal-input" id="new-app-name" autoFocus maxLength={100} value={newAppName} onChange={(event) => setNewAppName(event.target.value)} placeholder="Ej. Portal de servicios" required /><label className="field-label" htmlFor="new-app-category">Categoría</label><input className="modal-input" id="new-app-category" maxLength={80} value={newAppCategory} onChange={(event) => setNewAppCategory(event.target.value)} placeholder="Ecosistema" /><label className="field-label" htmlFor="new-app-description">Descripción</label><input className="modal-input" id="new-app-description" maxLength={500} value={newAppDescription} onChange={(event) => setNewAppDescription(event.target.value)} placeholder="Qué ofrece esta aplicación" /><label className="field-label" htmlFor="new-app-redirect">Redirect URI</label><input className="modal-input" id="new-app-redirect" type="url" value={newAppRedirectUri} onChange={(event) => setNewAppRedirectUri(event.target.value)} placeholder="https://app.ejemplo.org/placetaid/callback" required /><small className="field-help">Debe coincidir exactamente con el callback de tu aplicación. HTTPS obligatorio, salvo localhost en desarrollo.</small>{newAppError && <p className="gateway-error" role="alert">{newAppError}</p>}<div className="modal-info"><ShieldAlert size={15} /><span>Se crea un servicio general y la integración queda pendiente; solo podrá iniciar login después de autorizarla en el catálogo.</span></div><div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setNewAppOpen(false)} disabled={creatingApp}>Cancelar</button><button className="button-primary" type="submit" disabled={creatingApp || !adminToken}><Plus size={15} />{creatingApp ? 'Creando en Supabase…' : 'Crear aplicación'}</button></div></>}</form></div>}
+      {newAppOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingApp) setNewAppOpen(false) }}><form className="integration-modal" onSubmit={addIntegration}><div className="modal-topline"><span className="modal-icon"><Plus size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" onClick={() => setNewAppOpen(false)}><X size={17} /></button></div><h2>{newAppCredential ? 'Aplicación registrada' : 'Nueva integración'}</h2><p>{newAppCredential ? 'Las credenciales se muestran ahora una sola vez. Guárdalas en el backend seguro de tu aplicación.' : 'La solicitud se guardará en Supabase y recibirá un client_id real.'}</p>{newAppCredential ? <div className="created-credentials"><label className="field-label" htmlFor="created-client-id">Client ID</label><div className="credential-value"><code id="created-client-id">{newAppCredential.clientId}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientId)}>Copiar</button></div><label className="field-label" htmlFor="created-client-secret">Client secret · una sola vez</label><div className="credential-value"><code id="created-client-secret">{newAppCredential.clientSecret}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientSecret)}>Copiar</button></div>{newAppError && <p className="gateway-error" role="alert">{newAppError} Puedes cargar el logo desde la ficha de la aplicación.</p>}<div className="modal-info"><ShieldAlert size={15} /><span>No lo incluyas en JavaScript del navegador, repositorios ni URLs. Guárdalo como secreto del servidor. El acceso seguirá pendiente hasta que Administración lo autorice.</span></div><div className="modal-actions"><button className="button-primary" type="button" onClick={() => { setNewAppOpen(false); setNewAppCredential(null); setNewAppName(''); setNewAppDescription(''); setNewAppRedirectUri(''); setNewAppLogo(null); setNewAppError('') }}>He guardado las credenciales</button></div></div> : <><label className="field-label" htmlFor="new-app-name">Nombre de la aplicación</label><input className="modal-input" id="new-app-name" autoFocus maxLength={100} value={newAppName} onChange={(event) => setNewAppName(event.target.value)} placeholder="Ej. Portal de servicios" required /><label className="field-label" htmlFor="new-app-category">Categoría</label><input className="modal-input" id="new-app-category" maxLength={80} value={newAppCategory} onChange={(event) => setNewAppCategory(event.target.value)} placeholder="Ecosistema" /><label className="field-label" htmlFor="new-app-description">Descripción</label><input className="modal-input" id="new-app-description" maxLength={500} value={newAppDescription} onChange={(event) => setNewAppDescription(event.target.value)} placeholder="Qué ofrece esta aplicación" /><label className="app-logo-upload"><span>{newAppLogo ? <ImageIcon size={18} /> : <Plus size={18} />}</span><span><strong>{newAppLogo ? newAppLogo.name : 'Añadir logo de la aplicación'}</strong><small>PNG, JPEG o WebP · máximo 1 MB</small></span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { setNewAppLogo(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} /></label><label className="field-label" htmlFor="new-app-redirect">Redirect URI</label><input className="modal-input" id="new-app-redirect" type="url" value={newAppRedirectUri} onChange={(event) => setNewAppRedirectUri(event.target.value)} placeholder="https://app.ejemplo.org/placetaid/callback" required /><small className="field-help">Debe coincidir exactamente con el callback de tu aplicación. HTTPS obligatorio, salvo localhost en desarrollo.</small>{newAppError && <p className="gateway-error" role="alert">{newAppError}</p>}<div className="modal-info"><ShieldAlert size={15} /><span>Se crea un servicio general y la integración queda pendiente; solo podrá iniciar login después de autorizarla en el catálogo.</span></div><div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setNewAppOpen(false)} disabled={creatingApp}>Cancelar</button><button className="button-primary" type="submit" disabled={creatingApp || !adminToken}><Plus size={15} />{creatingApp ? 'Creando en Supabase…' : 'Crear aplicación'}</button></div></>}</form></div>}
       {consentPrompt && <div className="modal-backdrop consent-modal-backdrop" role="presentation"><section className="consent-modal" role="dialog" aria-modal="true" aria-labelledby="consent-modal-title"><div className="consent-modal-top"><span className="consent-modal-icon"><LockKeyhole size={18} /></span><button className="icon-button" aria-label="Cerrar solicitud" onClick={() => setConsentPrompt(null)}><X size={16} /></button></div><div className="eyebrow"><span className="eyebrow-line" />SOLICITUD DE DATO PROTEGIDO</div><h2 id="consent-modal-title">{integrations.find((app) => app.id === consentPrompt.appId)?.name ?? 'Esta aplicación'} quiere acceder a {protectedFieldLabel(consentPrompt.field).toLowerCase()}.</h2><p>Esta aplicación solicita permiso para utilizar este dato asociado a tu PlacetaID. La autorización solo se aplica a esta aplicación y puedes revocarla después.</p><div className="consent-modal-data"><span>{protectedFieldLabel(consentPrompt.field)}</span><span>Tu permiso, siempre revocable</span></div><div className="modal-actions"><button className="button-quiet" onClick={() => resolveConsentPrompt('denied')}>No permitir</button><button className="button-primary" onClick={() => resolveConsentPrompt('granted')}><Check size={14} />Permitir</button></div></section></div>}
       {legalDocument && <div className="modal-backdrop legal-document-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLegalDocument(null) }}><section className="legal-document-modal" role="dialog" aria-modal="true" aria-labelledby="legal-document-title"><div className="consent-modal-top"><span className="consent-modal-icon">{legalDocument === 'terms' ? <ShieldCheck size={18} /> : <LockKeyhole size={18} />}</span><button className="icon-button" aria-label="Cerrar documento" onClick={() => setLegalDocument(null)}><X size={16} /></button></div><span className="eyebrow">PLACETAID v27 · {LEGAL_VERSION}</span><h2 id="legal-document-title">{legalDocument === 'terms' ? 'Términos y condiciones' : 'Política de privacidad'}</h2>{legalDocument === 'terms' ? <div className="legal-document-copy"><h3>Servicio y autenticación</h3><p>PlacetaID localiza la cuenta con el DIP y confirma la identidad mediante un método de autenticación previamente vinculado. El DIP por sí solo no permite iniciar sesión. El acceso a cada aplicación depende de sus reglas, del estado de la cuenta y de la aprobación del titular.</p><h3>Información compartida</h3><p>Antes de confirmar una solicitud, PlacetaID identifica la aplicación y el servicio solicitante e informa de los datos que se transmitirán. Se incluyen el resultado de autenticación, indicadores de edad y nombre y apellidos. Los datos protegidos solo se transmiten cuando la aplicación está autorizada y el titular presta consentimiento específico. Las contraseñas, códigos temporales y tokens de dispositivo no se entregan a la aplicación solicitante.</p><h3>Uso responsable y seguridad</h3><p>El titular debe mantener bajo su control sus dispositivos y códigos de autenticación y comunicar cualquier pérdida. No debe compartir códigos ni intentar acceder a cuentas ajenas. PlacetaID puede suspender temporalmente una cuenta o integración ante riesgos de seguridad o incumplimientos; las decisiones de acceso y seguridad pueden registrarse para prevenir fraude y resolver incidencias.</p><h3>Permisos y finalización</h3><p>El titular puede rechazar una solicitud de acceso y revisar o revocar los permisos de datos protegidos desde «Mis permisos». La revocación evita que se incluyan esos datos en nuevas respuestas de PlacetaID; no elimina copias que la aplicación receptora ya hubiera obtenido, por lo que las solicitudes de supresión de esas copias deben dirigirse también a dicha aplicación.</p></div> : <div className="legal-document-copy"><h3>Responsable y finalidad</h3><p>Responsable: Grupo de La Placeta. PlacetaID trata los datos de identidad para localizar la cuenta solicitada, autenticar al titular, calcular los indicadores de edad necesarios y aplicar las reglas de acceso de la aplicación y el servicio identificados en pantalla.</p><h3>Datos tratados y destinatarios</h3><p>Se utilizan el DIP para localizar la cuenta, los datos necesarios para verificar el método de autenticación, el nombre y apellidos y los indicadores «mayor de 16» y «mayor de 18». La aplicación y el servicio indicados en cada solicitud reciben la respuesta de autenticación y esos datos básicos. El DIP, correo electrónico y estado de identidad verificada son datos protegidos: solo se envían si la aplicación está autorizada para solicitarlos y el titular los permite expresamente. El teléfono y la fotografía no se comparten en este flujo. Las contraseñas, códigos temporales y tokens de dispositivo no se entregan a la aplicación solicitante.</p><h3>Base, conservación y seguridad</h3><p>La autenticación se realiza para atender la solicitud iniciada por el titular y aplicar los controles de seguridad de la cuenta. El consentimiento es la base para compartir cada dato protegido. Los registros de autenticación y seguridad se conservan mientras sean necesarios para proteger el servicio, investigar incidencias y cumplir obligaciones aplicables; los permisos se mantienen hasta su revocación o el cierre de la cuenta. Se aplican controles de acceso, cifrado de secretos de autenticación y auditoría de operaciones sensibles.</p><h3>Derechos y contacto</h3><p>Puedes solicitar acceso, rectificación, supresión, limitación u oposición al tratamiento, y retirar un consentimiento desde «Mis permisos» sin afectar a los tratamientos anteriores. Para ejercer otros derechos, contacta con Administración de La Placeta a través de sus canales oficiales. También puedes reclamar ante la autoridad de protección de datos competente. La revocación en PlacetaID no borra los datos que la aplicación receptora ya haya recibido; solicita su supresión directamente a esa aplicación.</p></div>}<button className="button-primary legal-document-close" onClick={() => setLegalDocument(null)}>Cerrar documento</button></section></div>}
       {isPublicView && <button className="floating-plan-button" aria-haspopup="dialog" onClick={() => setPlanInfoOpen(true)}><span className="floating-plan-number">25</span><span><small>PLAN 2027</small><strong>Transformación digital</strong></span><ArrowRight size={15} /></button>}

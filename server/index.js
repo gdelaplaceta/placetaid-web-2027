@@ -10,6 +10,7 @@ const port = Number(process.env.API_PORT || 4174)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 app.disable('x-powered-by')
+app.use('/api/admin/apps/:id/logo', express.json({ limit: '1400kb' }))
 app.use(express.json({ limit: '48kb' }))
 app.use('/api', api)
 app.use(express.static(path.join(root, 'dist')))

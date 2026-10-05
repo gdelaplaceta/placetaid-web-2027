@@ -682,6 +682,28 @@ button { min-height: 38px; }
 .public-shell .gateway-response .payload-code { border: 0; border-radius: 12px; background: #1c0836; color: #c4b5fd; }
 .public-shell .gateway-privacy-footer { max-width: 480px; align-self: center; margin-top: 12px; color: #ded5f2; text-align: center; }
 .public-footer { max-width: 480px; margin: 0 auto; padding: 0 0 12px; }
+.gateway-wordmark-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.gateway-wordmark-row .gateway-wordmark { margin-bottom: 5px; }
+.public-requesting-app { display: flex; align-items: center; gap: 9px; margin-left: auto; margin-right: 14px; color: #705e80; font-size: 10px; font-weight: 700; }
+.public-requesting-app img { width: 34px; height: 34px; object-fit: contain; padding: 3px; border: 1px solid #e5ddf2; border-radius: 9px; background: #fff; }
+.gateway-page[data-gateway-stage="entry"] .gateway-continue { background: var(--gateway-brand, #6d28d9); }
+.gateway-page[data-gateway-stage="entry"] .gateway-dip-input { border-color: var(--gateway-brand, #6d28d9); }
+.gateway-page[data-gateway-stage="entry"]::before { background: var(--gateway-brand, #6d28d9); }
+.gateway-page[data-gateway-stage="entry"] .gateway-app-mark { border-color: color-mix(in srgb, var(--gateway-brand, #6d28d9) 35%, white); }
+.gateway-password-form { display: flex; flex-direction: column; }
+.gateway-password-input { width: 100%; height: 46px; padding: 0 13px; border: 2px solid #6d28d9; border-radius: 10px; background: #fff; color: #2b0f54; font-size: 15px; }
+.gateway-password-link { align-self: center; margin-top: 12px; padding: 4px; border: 0; background: transparent; color: #6d28d9; font-size: 10px; font-weight: 800; text-decoration: underline; cursor: pointer; }
+.gateway-password-temporary-note { margin-top: 9px; color: #806f89; font-size: 8px; line-height: 1.5; text-align: center; }
+.app-logo-upload { min-height: 58px; display: flex; align-items: center; gap: 11px; margin: 12px 0; padding: 8px 10px; border: 1px dashed #cfc0e2; border-radius: 10px; background: #faf8fd; cursor: pointer; }
+.app-logo-upload > span:first-child { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; overflow: hidden; border-radius: 9px; background: #efe8ff; color: #6d28d9; }
+.app-logo-upload > span:first-child img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.app-logo-upload > span:nth-child(2) { display: flex; flex: 1; flex-direction: column; gap: 4px; }
+.app-logo-upload strong { color: #493260; font-size: 10px; }
+.app-logo-upload small { color: #827192; font-size: 8px; }
+.app-logo-upload input { width: 1px; height: 1px; overflow: hidden; }
+.app-logo-upload:focus-within { outline: 2px solid #8b5cf6; outline-offset: 2px; }
+.policy-app-heading .app-mark { overflow: hidden; }
+.policy-app-heading .app-mark img { width: 100%; height: 100%; object-fit: contain; padding: 4px; background: white; }
 
 .legal-consent-step { margin-top: 15px; padding-top: 15px; border-top: 2px solid #c4b5fd; }
 .legal-consent-step > .gateway-step-heading h2 { font-size: 16px; }
@@ -805,6 +827,9 @@ button { min-height: 38px; }
 
 @media (max-width: 760px) {
   .public-shell .gateway-page { min-height: calc(100dvh - 62px); justify-content: flex-start; padding: 6vh 18px 92px; }
+  .public-requesting-app { margin-right: 8px; font-size: 0; }
+  .public-requesting-app img { width: 30px; height: 30px; }
+  .gateway-password-link { max-width: 100%; line-height: 1.5; text-align: center; }
   .public-shell .gateway-page::before { width: 145px; height: 145px; top: 3%; left: -36px; }
   .public-shell .gateway-page::after { width: 75px; height: 75px; right: -15px; bottom: 18%; }
   .public-shell .gateway-flow-panel, .public-shell .gateway-policy-panel { padding: 21px 20px; }
