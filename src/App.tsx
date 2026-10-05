@@ -40,13 +40,27 @@ type Role = 'administrador' | 'miembro' | 'entidad' | 'visitante'
 type IntegrationStatus = 'authorized' | 'disabled' | 'pending'
 type AgeLimit = 0 | 16 | 18
 type View = 'home' | 'applications' | 'users' | 'permissions' | 'gateway' | 'myPermissions' | 'simulator' | 'activity'
-type ProtectedField = 'email' | 'phone' | 'photo' | 'identityVerified'
+type ProtectedField = 'dip' | 'email' | 'phone' | 'photo' | 'identityVerified'
 type UserStatus = 'active' | 'pending' | 'restricted' | 'suspended' | 'closed'
 type ConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked'
-type GatewayStage = 'entry' | 'detected' | 'legal' | 'authenticated'
+type GatewayStage = 'entry' | 'detected' | 'legal' | 'consent' | 'authenticated'
 type LegalDocument = 'terms' | 'privacy'
+type GatewayMethod = 'mobile' | 'authenticator' | 'desktop'
+type GatewayResponse = {
+  stage?: string
+  login_correct?: boolean
+  requestId?: string
+  method?: GatewayMethod
+  claims?: Record<string, string | boolean | undefined>
+  fields?: ProtectedField[]
+  redirectUrl?: string
+  reason?: string
+  message?: string
+  app?: { name?: string }
+  service?: { name?: string }
+}
 
-const LEGAL_VERSION = 'v27.0-2026-10'
+const LEGAL_VERSION = 'v27-2026-10'
 
 type Service = {
   id: string
@@ -109,7 +123,7 @@ const initialIntegrations: Integration[] = [
   {
     id: 'banco', clientId: '79d7087aa027fac0250e832c4b5d39b2', name: 'Banco de La Placeta', category: 'Finanzas', initials: 'BL', color: 'green', status: 'authorized', minAge: 0,
     roles: ['administrador', 'miembro', 'entidad'],
-    scopes: { email: true, phone: false, photo: false, identityVerified: true }, updated: 'Hoy, 10:24',
+    scopes: { dip: false, email: true, phone: false, photo: false, identityVerified: true }, updated: 'Hoy, 10:24',
     services: [
       { id: 'general', name: 'Acceso general', description: 'Inicio de sesión en el portal', enabled: true, minAge: 0, roles: ['administrador', 'miembro', 'entidad'] },
       { id: 'cuentas', name: 'Consulta de cuentas', description: 'Posición y movimientos', enabled: true, minAge: 16, roles: ['administrador', 'miembro', 'entidad'] },
@@ -119,7 +133,7 @@ const initialIntegrations: Integration[] = [
   },
   {
     id: 'rsp', clientId: 'eaf341d5a71b9a3bfc01d0fc8c31ea01', name: 'RSP', category: 'Administración', initials: 'RS', color: 'coral', status: 'authorized', minAge: 16,
-    roles: ['administrador', 'miembro'], scopes: { email: true, phone: false, photo: false, identityVerified: true }, updated: 'Ayer, 16:08',
+    roles: ['administrador', 'miembro'], scopes: { dip: false, email: true, phone: false, photo: false, identityVerified: true }, updated: 'Ayer, 16:08',
     services: [
       { id: 'panel', name: 'Panel de servicios', description: 'Acceso al panel de administración', enabled: true, minAge: 16, roles: ['administrador'] },
       { id: 'expedientes', name: 'Expedientes', description: 'Consulta de expedientes propios', enabled: true, minAge: 16, roles: ['administrador', 'miembro'] },
@@ -128,7 +142,7 @@ const initialIntegrations: Integration[] = [
   },
   {
     id: 'joven', clientId: 'placetajoven-web', name: 'Placeta Joven', category: 'Comunidad', initials: 'PJ', color: 'orange', status: 'authorized', minAge: 16,
-    roles: ['miembro'], scopes: { email: true, phone: false, photo: true, identityVerified: false }, updated: '28 oct 2026',
+    roles: ['miembro'], scopes: { dip: false, email: true, phone: false, photo: true, identityVerified: false }, updated: '28 oct 2026',
     services: [
       { id: 'ventajas', name: 'Ventajas', description: 'Catálogo de descuentos', enabled: true, minAge: 16, roles: ['miembro'] },
       { id: 'eventos', name: 'Eventos', description: 'Inscripción a actividades', enabled: true, minAge: 16, roles: ['miembro'] },
@@ -137,7 +151,7 @@ const initialIntegrations: Integration[] = [
   },
   {
     id: 'crm', clientId: 'ccb611655030bdadf7218418dc195dcb', name: 'CRM Grupo Placeta', category: 'Administración', initials: 'CR', color: 'blue', status: 'authorized', minAge: 18,
-    roles: ['administrador', 'entidad'], scopes: { email: true, phone: true, photo: false, identityVerified: true }, updated: '24 oct 2026',
+    roles: ['administrador', 'entidad'], scopes: { dip: false, email: true, phone: true, photo: false, identityVerified: true }, updated: '24 oct 2026',
     services: [
       { id: 'contactos', name: 'Contactos', description: 'Gestión de contactos', enabled: true, minAge: 18, roles: ['administrador', 'entidad'] },
       { id: 'informes', name: 'Informes', description: 'Informes internos', enabled: true, minAge: 18, roles: ['administrador'] },
@@ -145,7 +159,7 @@ const initialIntegrations: Integration[] = [
   },
   {
     id: 'voley', clientId: 'voley-club', name: 'Voley Club La Placeta', category: 'Deporte', initials: 'VC', color: 'pink', status: 'authorized', minAge: 0,
-    roles: ['miembro', 'visitante'], scopes: { email: false, phone: false, photo: false, identityVerified: false }, updated: '20 oct 2026',
+    roles: ['miembro', 'visitante'], scopes: { dip: false, email: false, phone: false, photo: false, identityVerified: false }, updated: '20 oct 2026',
     services: [
       { id: 'area-jugador', name: 'Área del jugador', description: 'Perfil y calendario deportivo', enabled: true, minAge: 0, roles: ['miembro', 'visitante'] },
       { id: 'competicion', name: 'Competición', description: 'Inscripción a competiciones', enabled: true, minAge: 16, roles: ['miembro'] },
@@ -153,7 +167,7 @@ const initialIntegrations: Integration[] = [
   },
   {
     id: 'bop', clientId: 'bop-web', name: 'Boletín Oficial (BOP)', category: 'Publicación', initials: 'BO', color: 'slate', status: 'pending', minAge: 0,
-    roles: ['administrador', 'miembro'], scopes: { email: false, phone: false, photo: false, identityVerified: false }, updated: 'Solicitud · 19 oct 2026',
+    roles: ['administrador', 'miembro'], scopes: { dip: false, email: false, phone: false, photo: false, identityVerified: false }, updated: 'Solicitud · 19 oct 2026',
     services: [{ id: 'lectura', name: 'Consulta de boletines', description: 'Acceso al archivo público', enabled: true, minAge: 0, roles: ['administrador', 'miembro'] }],
   },
 ]
@@ -189,21 +203,15 @@ const initialUsers: ManagedUser[] = [
 function resolveGatewayRequest() {
   const params = new URLSearchParams(window.location.search)
   const clientId = params.get('client_id') || params.get('clientId') || ''
-  const appParameter = params.get('app') || clientId
-  const app = initialIntegrations.find((item) => item.id === appParameter || item.clientId === appParameter)
-  const serviceParameter = params.get('service') || params.get('service_key') || ''
-  const service = app?.services.find((item) => item.id === serviceParameter || item.name.toLowerCase() === serviceParameter.toLowerCase())
-  const redirectUri = params.get('redirect_uri') || ''
-  const redirectAllowed = !clientId || Boolean(app?.redirectUris?.includes(redirectUri))
+  const legacyCallback = params.get('from') || ''
+  const redirectUri = params.get('redirect_uri') || params.get('redirectUri') || legacyCallback
+  const requestedService = params.get('service') || params.get('service_key') || ''
   return {
-    appId: app?.id ?? 'joven',
-    serviceId: service?.id ?? app?.services[0]?.id ?? 'ventajas',
-    bound: Boolean(clientId || params.get('app')),
-    valid: Boolean(clientId) && Boolean(app) && Boolean(redirectUri) && redirectAllowed,
+    bound: Boolean(clientId),
+    valid: Boolean(clientId && redirectUri),
     redirectUri,
     state: params.get('state') || '',
-    appName: app?.name ?? '',
-    serviceName: service?.name ?? '',
+    serviceKey: legacyCallback && requestedService.toLowerCase() === 'nexe' ? 'general' : requestedService,
   }
 }
 
@@ -232,6 +240,29 @@ function userStatusLabel(status: UserStatus) {
   return { active: 'Activo', pending: 'Pendiente', restricted: 'Restringido', suspended: 'Suspendido', closed: 'Cerrado' }[status]
 }
 
+function mapManagedUser(value: Partial<ManagedUser>): ManagedUser {
+  const role = roles.includes(value.role as Role) ? value.role as Role : 'miembro'
+  const statuses: UserStatus[] = ['active', 'pending', 'restricted', 'suspended', 'closed']
+  return {
+    id: String(value.id || ''),
+    dip: String(value.dip || ''),
+    placeid: String(value.placeid || ''),
+    name: String(value.name || ''),
+    surname: String(value.surname || ''),
+    birthDate: String(value.birthDate || ''),
+    email: String(value.email || ''),
+    phone: value.phone ?? '',
+    role,
+    status: statuses.includes(value.status as UserStatus) ? value.status as UserStatus : 'pending',
+    identityVerified: Boolean(value.identityVerified),
+    auth: value.auth ?? { mobile: false, authenticator: false, desktop: false },
+    appOverrides: value.appOverrides ?? {},
+    permissions: value.permissions ?? [],
+    legalAcceptedVersions: value.legalAcceptedVersions ?? [],
+    lastAccess: String(value.lastAccess || ''),
+  }
+}
+
 function consentStatusLabel(status: ConsentStatus) {
   return { pending: 'Pendiente', granted: 'Concedido', denied: 'No permitido', revoked: 'Revocado' }[status]
 }
@@ -244,7 +275,7 @@ function authMethod(user: ManagedUser) {
 }
 
 function protectedFieldLabel(field: ProtectedField) {
-  return { email: 'Correo electrónico', phone: 'Número de teléfono', photo: 'Fotografía de perfil', identityVerified: 'Identidad verificada' }[field]
+  return { dip: 'DIP', email: 'Correo electrónico', phone: 'Número de teléfono', photo: 'Fotografía de perfil', identityVerified: 'Identidad verificada' }[field]
 }
 
 function calculateAge(birthDate: string) {
@@ -256,7 +287,7 @@ function calculateAge(birthDate: string) {
 function App() {
   const [integrations, setIntegrations] = useState(() => readStored('plid27.v27.integrations', initialIntegrations))
   const [audit, setAudit] = useState(() => readStored('plid27.v27.audit', initialAudit))
-  const [users, setUsers] = useState(() => readStored('plid27.v27.users', initialUsers))
+  const [users, setUsers] = useState<ManagedUser[]>(initialUsers)
   const [selectedId, setSelectedId] = useState('banco')
   const [view, setView] = useState<View>(initialGatewayRequest.bound ? 'gateway' : 'home')
   const [query, setQuery] = useState('')
@@ -266,6 +297,12 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<'all' | IntegrationStatus>('all')
   const [newAppOpen, setNewAppOpen] = useState(false)
   const [newAppName, setNewAppName] = useState('')
+  const [newAppCategory, setNewAppCategory] = useState('Ecosistema')
+  const [newAppRedirectUri, setNewAppRedirectUri] = useState('')
+  const [newAppDescription, setNewAppDescription] = useState('')
+  const [newAppCredential, setNewAppCredential] = useState<{ clientId: string; clientSecret: string } | null>(null)
+  const [newAppError, setNewAppError] = useState('')
+  const [creatingApp, setCreatingApp] = useState(false)
   const [planInfoOpen, setPlanInfoOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [simAppId, setSimAppId] = useState('joven')
@@ -275,24 +312,59 @@ function App() {
   const [simRole, setSimRole] = useState<Role>(initialUsers[0].role)
   const [gatewayDip, setGatewayDip] = useState('')
   const [gatewayStage, setGatewayStage] = useState<GatewayStage>('entry')
-  const [gatewayUserId, setGatewayUserId] = useState('')
+  const [gatewayUser, setGatewayUser] = useState<ManagedUser | null>(null)
   const [gatewayError, setGatewayError] = useState('')
   const [gatewayOtp, setGatewayOtp] = useState('')
   const [gatewayRequestId, setGatewayRequestId] = useState('')
+  const [gatewayMethod, setGatewayMethod] = useState<GatewayMethod | null>(null)
+  const [gatewayAppName, setGatewayAppName] = useState('')
+  const [gatewayServiceName, setGatewayServiceName] = useState('')
+  const [gatewayClaims, setGatewayClaims] = useState<Record<string, string | boolean | undefined> | null>(null)
+  const [gatewayConsentFields, setGatewayConsentFields] = useState<ProtectedField[]>([])
+  const [gatewayIntegrations, setGatewayIntegrations] = useState<Integration[]>([])
+  const [gatewayBusy, setGatewayBusy] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null)
-  const [gatewayAppId, setGatewayAppId] = useState(initialGatewayRequest.appId)
-  const [gatewayServiceId, setGatewayServiceId] = useState(initialGatewayRequest.serviceId)
   const [consentPrompt, setConsentPrompt] = useState<{ userId: string; appId: string; field: ProtectedField } | null>(null)
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('plid27.adminToken') || '')
   const [adminSyncing, setAdminSyncing] = useState(false)
+  const [supabaseStatus, setSupabaseStatus] = useState<'checking' | 'ready' | 'migration' | 'offline'>('checking')
+  const [deviceBridgeConfigured, setDeviceBridgeConfigured] = useState(false)
 
   useEffect(() => localStorage.setItem('plid27.v27.integrations', JSON.stringify(integrations)), [integrations])
   useEffect(() => localStorage.setItem('plid27.v27.audit', JSON.stringify(audit)), [audit])
-  useEffect(() => localStorage.setItem('plid27.v27.users', JSON.stringify(users)), [users])
   useEffect(() => {
-    if (view !== 'applications' || adminSyncing) return
+    let active = true
+    fetch('/api/health')
+      .then(async (response) => {
+        const status = await response.json()
+        if (active) {
+          setSupabaseStatus(status.ok ? 'ready' : status.migrationRequired ? 'migration' : 'offline')
+          setDeviceBridgeConfigured(status.deviceBridgeConfigured === true)
+        }
+      })
+      .catch(() => { if (active) setSupabaseStatus('offline') })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    let active = true
+    fetch('/api/public/session')
+      .then(async (response) => {
+        if (response.status === 401) return
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.message || 'No se pudo cargar la sesión PlacetaID.')
+        if (active) {
+          setGatewayUser(mapManagedUser(payload.user))
+          setGatewayIntegrations(payload.integrations ?? [])
+          if (!initialGatewayRequest.bound) setGatewayStage('authenticated')
+        }
+      })
+      .catch((error) => console.error('[PlacetaID UI] No se pudo restaurar la sesión:', error))
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (!['applications', 'users', 'permissions'].includes(view) || adminSyncing) return
     async function loadAdminCatalog() {
       let token = adminToken
       if (!token) {
@@ -306,9 +378,25 @@ function App() {
       }
       setAdminSyncing(true)
       const response = await fetch('/api/admin/apps', { headers: { Authorization: `Bearer ${token}` } })
-      if (response.ok) setIntegrations(await response.json())
-      else if (response.status === 401) { localStorage.removeItem('plid27.adminToken'); setAdminToken(''); showToast('La sesión de Administración ha caducado') }
-      else showToast('No se pudo cargar el catálogo desde Supabase')
+      if (response.ok) {
+        setIntegrations(await response.json())
+        if (view === 'users' || view === 'permissions') {
+          const userResponse = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } })
+          const userPayload = await userResponse.json()
+          if (!userResponse.ok) {
+            if (userResponse.status === 401) { localStorage.removeItem('plid27.adminToken'); setAdminToken(''); showToast('La sesión de Administración ha caducado') }
+            else showToast(userPayload.message || 'No se pudo cargar el directorio de identidades.')
+          } else {
+            const loadedUsers = (userPayload as Partial<ManagedUser>[]).map(mapManagedUser)
+            setUsers(loadedUsers)
+            if (loadedUsers[0]) setSelectedUserId((current) => loadedUsers.some((user) => user.id === current) ? current : loadedUsers[0].id)
+          }
+        }
+      } else if (response.status === 401) { localStorage.removeItem('plid27.adminToken'); setAdminToken(''); showToast('La sesión de Administración ha caducado') }
+      else {
+        const payload = await response.json()
+        showToast(payload.message || 'No se pudo cargar el catálogo desde Supabase')
+      }
       setAdminSyncing(false)
     }
     void loadAdminCatalog().catch(() => { setAdminSyncing(false); showToast('API de Administración no disponible') })
@@ -323,15 +411,12 @@ function App() {
   const pendingCount = integrations.filter((item) => item.status === 'pending').length
   const restrictionCount = integrations.flatMap((item) => item.services).filter((service) => !service.enabled || service.minAge > 0).length
   const selectedUser = users.find((user) => user.id === selectedUserId) ?? users[0]
-  const gatewayUser = users.find((user) => user.id === gatewayUserId)
   const simIdentity = users.find((user) => user.id === simUserId) ?? users[0]
   const visibleUsers = users.filter((user) => {
     const matchesQuery = `${user.dip} ${user.placeid} ${user.name} ${user.surname} ${user.email}`.toLowerCase().includes(userQuery.toLowerCase())
     return matchesQuery && (userStatusFilter === 'all' || user.status === userStatusFilter)
   })
   const pendingConsentCount = users.reduce((count, user) => count + user.permissions.filter((permission) => permission.status === 'pending').length, 0)
-  const gatewayApp = integrations.find((item) => item.id === gatewayAppId)
-  const gatewayService = gatewayApp?.services.find((service) => service.id === gatewayServiceId) ?? gatewayApp?.services[0]
   const isPublicView = view === 'home' || view === 'gateway' || view === 'myPermissions'
 
   const simApp = integrations.find((item) => item.id === simAppId)
@@ -360,10 +445,26 @@ function App() {
   }
 
   function updateUser(id: string, update: (user: ManagedUser) => ManagedUser) {
-    setUsers((current) => current.map((user) => user.id === id ? update(user) : user))
+    const currentUser = users.find((user) => user.id === id)
+    if (!currentUser) return
+    const changedUser = update(currentUser)
+    setUsers((current) => current.map((user) => user.id === id ? changedUser : user))
+    if (!adminToken || !/^\d+$/.test(id)) return
+    void fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ status: changedUser.status, identityVerified: changedUser.identityVerified }),
+    }).then(async (response) => {
+      const payload = await response.json()
+      if (!response.ok) showToast(payload.message || 'No se pudo guardar el estado de la identidad.')
+    }).catch(() => showToast('No se pudo conectar con el directorio de identidades.'))
   }
 
   function updateConsent(userId: string, appId: string, field: ProtectedField, status: ConsentStatus) {
+    if (gatewayUser?.id === userId && (status === 'granted' || status === 'denied' || status === 'revoked')) {
+      void updateOwnConsent(appId, field, status)
+      return
+    }
     const app = integrations.find((item) => item.id === appId)
     if (!app?.scopes[field] && status === 'granted') {
       showToast('Administración no permite solicitar este dato a la aplicación')
@@ -385,7 +486,7 @@ function App() {
   function requestConsent(userId: string, appId: string, field: ProtectedField) {
     const user = users.find((item) => item.id === userId)
     const existing = user?.permissions.find((permission) => permission.appId === appId && permission.field === field)
-    if (!existing || existing.status === 'denied' || existing.status === 'revoked') updateConsent(userId, appId, field, 'pending')
+    if (userId !== gatewayUser?.id && (!existing || existing.status === 'denied' || existing.status === 'revoked')) updateConsent(userId, appId, field, 'pending')
     setConsentPrompt({ userId, appId, field })
   }
 
@@ -409,12 +510,23 @@ function App() {
 
   function toggleUserApp(user: ManagedUser, app: Integration) {
     const blocked = user.appOverrides[app.id] === 'deny'
+    const decision = blocked ? 'allow' : 'deny'
     updateUser(user.id, (current) => {
       const appOverrides = { ...current.appOverrides }
       if (blocked) delete appOverrides[app.id]
       else appOverrides[app.id] = 'deny'
       return { ...current, appOverrides }
     })
+    if (adminToken && /^\d+$/.test(user.id)) {
+      void fetch(`/api/admin/users/${encodeURIComponent(user.id)}/access/${encodeURIComponent(app.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ decision }),
+      }).then(async (response) => {
+        const payload = await response.json()
+        if (!response.ok) showToast(payload.message || 'No se pudo guardar la regla de acceso.')
+      }).catch(() => showToast('No se pudo conectar con la política de acceso.'))
+    }
     addAudit(blocked ? 'Bloqueo individual retirado' : 'Aplicación bloqueada para identidad', `${user.name} ${user.surname} · ${app.name}`)
     showToast(blocked ? 'Regla individual retirada' : 'Acceso de la identidad bloqueado')
   }
@@ -427,9 +539,23 @@ function App() {
   }
 
   function closeUserSessions(user: ManagedUser) {
-    updateUser(user.id, (current) => ({ ...current, auth: { mobile: false, authenticator: false, desktop: false } }))
+    if (!adminToken || !/^\d+$/.test(user.id)) {
+      showToast('La sesión administrativa no está activa.')
+      return
+    }
+    void fetch(`/api/admin/users/${encodeURIComponent(user.id)}/revoke-sessions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }).then(async (response) => {
+      const payload = await response.json()
+      if (!response.ok) {
+        showToast(payload.message || 'No se pudieron revocar las sesiones.')
+        return
+      }
+      updateUser(user.id, (current) => ({ ...current, auth: { mobile: false, authenticator: false, desktop: false } }))
+      showToast('Sesiones y dispositivos revocados')
+    }).catch(() => showToast('No se pudo conectar con PlacetaID.'))
     addAudit('Sesiones y dispositivos revocados', `${user.name} ${user.surname} · ${user.placeid}`)
-    showToast('Sesiones y dispositivos revocados')
   }
 
   async function submitGatewayDip(event: FormEvent<HTMLFormElement>) {
@@ -440,91 +566,240 @@ function App() {
       setGatewayError('Introduce el DIP completo: 8 números y una letra.')
       return
     }
-    if (initialGatewayRequest.bound) {
-      if (!initialGatewayRequest.valid) { setGatewayError('La aplicación o redirect_uri no está autorizado.'); return }
-      try {
-        const params = new URLSearchParams(window.location.search)
-        const response = await fetch('/api/public/identify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dip, clientId: params.get('client_id') || params.get('clientId'), redirectUri: params.get('redirect_uri'), serviceKey: params.get('service') || params.get('service_key') || undefined, state: params.get('state') || undefined }) })
-        const payload = await response.json()
-        if (!response.ok) { setGatewayError(payload.message || 'No se pudo iniciar la autenticación.'); return }
-        setGatewayRequestId(payload.requestId)
-      } catch { setGatewayError('No se pudo contactar con el servicio de identidad.'); return }
-    }
-    const user = users.find((item) => item.dip === dip)
-    if (!user) {
-      setGatewayError('No encontramos una identidad con ese DIP.')
+    if (initialGatewayRequest.bound && !initialGatewayRequest.valid) {
+      setGatewayError('La solicitud no incluye un client_id y redirect_uri válidos.')
       return
     }
-    setGatewayUserId(user.id)
-    setSelectedUserId(user.id)
-    setGatewayOtp('')
-    setTermsAccepted(false)
-    setPrivacyAccepted(false)
-    setLegalDocument(null)
-    setGatewayStage('detected')
+    setGatewayBusy(true)
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const response = await fetch('/api/public/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dip,
+          ...(initialGatewayRequest.bound ? {
+            clientId: params.get('client_id') || params.get('clientId'),
+            redirectUri: initialGatewayRequest.redirectUri,
+            serviceKey: initialGatewayRequest.serviceKey || undefined,
+            state: params.get('state') || undefined,
+          } : {}),
+        }),
+      })
+      const payload: GatewayResponse = await response.json()
+      if (!response.ok) {
+        setGatewayError(payload.message || 'No se pudo iniciar la autenticación.')
+        return
+      }
+      if (!payload.requestId || !payload.method) {
+        setGatewayError('La API no devolvió una solicitud de autenticación válida.')
+        return
+      }
+      setGatewayRequestId(payload.requestId)
+      setGatewayMethod(payload.method)
+      setGatewayAppName(payload.app?.name || '')
+      setGatewayServiceName(payload.service?.name || '')
+      setGatewayClaims(null)
+      setGatewayConsentFields([])
+      setGatewayOtp('')
+      setTermsAccepted(false)
+      setPrivacyAccepted(false)
+      setLegalDocument(null)
+      setGatewayStage('detected')
+    } catch {
+      setGatewayError('No se pudo contactar con PlacetaID. Comprueba que la API esté activa.')
+    } finally {
+      setGatewayBusy(false)
+    }
+  }
+
+  async function processGatewayResponse(payload: GatewayResponse) {
+    if (payload.stage === 'legal_required') {
+      setGatewayStage('legal')
+      setGatewayError('')
+      return
+    }
+    if (payload.stage === 'consent_required') {
+      setGatewayConsentFields(payload.fields ?? [])
+      setGatewayStage('consent')
+      setGatewayError('')
+      return
+    }
+    if (payload.stage === 'complete' && payload.login_correct) {
+      if (payload.redirectUrl) {
+        window.location.assign(payload.redirectUrl)
+        return
+      }
+      setGatewayClaims(payload.claims ?? null)
+      setGatewayError('')
+      try {
+        const sessionResponse = await fetch('/api/public/session')
+        const sessionPayload = await sessionResponse.json()
+        if (sessionResponse.ok) {
+          setGatewayUser(mapManagedUser(sessionPayload.user))
+          setGatewayIntegrations(sessionPayload.integrations ?? [])
+        } else {
+          setGatewayError(sessionPayload.message || 'Inicio completado, pero no se pudo cargar el perfil.')
+        }
+      } catch {
+        setGatewayError('Inicio completado, pero no se pudo cargar el perfil de Supabase.')
+      }
+      setGatewayStage('authenticated')
+      return
+    }
+    if (payload.stage === 'denied') {
+      setGatewayError(payload.reason ? `PlacetaID denegó el acceso (${payload.reason}).` : 'PlacetaID denegó el acceso.')
+      return
+    }
+    setGatewayError(payload.message || 'La autenticación no se ha completado.')
   }
 
   async function confirmGatewayIdentity() {
-    if (!gatewayUser) return
-    const method = authMethod(gatewayUser)
-    if (!method) {
-      setGatewayError('No hay una sesión válida vinculada. Inicia una recuperación de acceso desde Administración.')
+    if (!gatewayRequestId || !gatewayMethod) {
+      setGatewayError('No hay una solicitud de autenticación activa. Vuelve a introducir tu DIP.')
       return
     }
-    if (method === 'authenticator' && !/^\d{6}$/.test(gatewayOtp)) {
+    if (gatewayMethod === 'authenticator' && !/^\d{6}$/.test(gatewayOtp)) {
       setGatewayError('Introduce el código de seis cifras del Autentificador.')
       return
     }
-    if (gatewayUser.status === 'suspended' || gatewayUser.status === 'closed') {
-      setGatewayError(`La cuenta está ${userStatusLabel(gatewayUser.status).toLowerCase()}. Contacta con Administración.`)
-      return
-    }
-    if (gatewayRequestId && method === 'authenticator') {
-      const response = await fetch('/api/public/authenticate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: gatewayRequestId, code: gatewayOtp }) })
-      const payload = await response.json()
-      if (!response.ok) { setGatewayError(payload.message || 'El código del Autentificador no es válido.'); return }
-      if (payload.stage === 'legal_required') { setGatewayStage('legal'); return }
-      if (payload.stage === 'complete') { setGatewayStage('authenticated'); return }
-      setGatewayError('La autenticación no se ha completado.'); return
-    }
-    if (gatewayRequestId && (method === 'mobile' || method === 'desktop')) {
+    setGatewayBusy(true)
+    try {
+      if (gatewayMethod === 'authenticator') {
+        const response = await fetch('/api/public/authenticate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: gatewayRequestId, code: gatewayOtp }),
+        })
+        const payload: GatewayResponse = await response.json()
+        if (!response.ok) {
+          setGatewayError(payload.message || 'El código del Autentificador no es válido.')
+          return
+        }
+        await processGatewayResponse(payload)
+        return
+      }
+
       setGatewayError('Aprueba la solicitud desde tu dispositivo vinculado…')
       for (let attempt = 0; attempt < 30; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000))
         const response = await fetch(`/api/public/auth-requests/${encodeURIComponent(gatewayRequestId)}`)
-        const payload = await response.json()
-        if (payload.stage === 'complete') { setGatewayStage('authenticated'); setGatewayError(''); return }
-        if (payload.stage === 'denied') { setGatewayError('La solicitud fue rechazada en el dispositivo.'); return }
+        const payload: GatewayResponse = await response.json()
+        if (!response.ok) {
+          setGatewayError(payload.message || 'No se pudo consultar la solicitud.')
+          return
+        }
+        if (payload.stage === 'waiting') continue
+        await processGatewayResponse(payload)
+        return
       }
-      setGatewayError('La solicitud ha caducado o no fue aprobada.'); return
+      setGatewayError('La solicitud ha caducado o no fue aprobada.')
+    } catch {
+      setGatewayError('No se pudo completar la autenticación con el servidor.')
+    } finally {
+      setGatewayBusy(false)
     }
-    if (gatewayUser.legalAcceptedVersions?.includes(LEGAL_VERSION)) {
-      finishGatewayAuthentication(gatewayUser, method)
-      return
-    }
-    setGatewayStage('legal')
-    setGatewayError('')
   }
 
-  function finishGatewayAuthentication(user: ManagedUser, method: NonNullable<ReturnType<typeof authMethod>>) {
-    setGatewayStage('authenticated')
-    addAudit(`Inicio de sesión con ${method === 'mobile' ? 'PlacetaID móvil' : method === 'authenticator' ? 'Autentificador' : 'PlacetaID Desktop'}`, `${user.name} ${user.surname} · ${user.placeid}`)
-  }
-
-  function acceptLegalDocuments() {
-    if (!gatewayUser || !termsAccepted || !privacyAccepted) {
+  async function acceptLegalDocuments() {
+    if (!gatewayRequestId || !termsAccepted || !privacyAccepted) {
       setGatewayError('Acepta los términos y la política de privacidad para continuar.')
       return
     }
-    updateUser(gatewayUser.id, (user) => ({ ...user, legalAcceptedVersions: [...new Set([...(user.legalAcceptedVersions ?? []), LEGAL_VERSION])] }))
-    setGatewayError('')
-    const method = authMethod(gatewayUser)
-    if (method) finishGatewayAuthentication(gatewayUser, method)
+    setGatewayBusy(true)
+    try {
+      const response = await fetch('/api/public/accept-legal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: gatewayRequestId, accepted: true }),
+      })
+      const payload: GatewayResponse = await response.json()
+      if (!response.ok) {
+        setGatewayError(payload.message || 'No se pudieron registrar las aceptaciones.')
+        return
+      }
+      await processGatewayResponse(payload)
+    } catch {
+      setGatewayError('No se pudo registrar la aceptación en PlacetaID.')
+    } finally {
+      setGatewayBusy(false)
+    }
+  }
+
+  async function decideGatewayConsent(field: ProtectedField, decision: 'granted' | 'denied') {
+    if (!gatewayRequestId) return
+    setGatewayBusy(true)
+    try {
+      const response = await fetch('/api/public/consents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: gatewayRequestId, field, decision }),
+      })
+      const payload: GatewayResponse = await response.json()
+      if (!response.ok) {
+        setGatewayError(payload.message || 'No se pudo guardar el consentimiento.')
+        return
+      }
+      await processGatewayResponse(payload)
+    } catch {
+      setGatewayError('No se pudo guardar tu decisión en PlacetaID.')
+    } finally {
+      setGatewayBusy(false)
+    }
+  }
+
+  async function updateOwnConsent(appId: string, field: ProtectedField, status: 'granted' | 'denied' | 'revoked') {
+    try {
+      const response = await fetch('/api/public/session/consents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId, field, decision: status }),
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        showToast(payload.message || 'No se pudo actualizar el permiso.')
+        return
+      }
+      setGatewayUser((current) => current ? {
+        ...current,
+        permissions: [
+          ...current.permissions.filter((permission) => permission.appId !== appId || permission.field !== field),
+          { appId, field, status, updated: payload.updated },
+        ],
+      } : current)
+      showToast(status === 'granted' ? 'Permiso concedido' : 'Permiso revocado')
+    } catch {
+      showToast('No se pudo conectar con PlacetaID.')
+    }
+  }
+
+  async function logoutGatewayUser() {
+    try {
+      const response = await fetch('/api/public/logout', { method: 'POST' })
+      const payload = await response.json()
+      if (!response.ok) {
+        showToast(payload.message || 'No se pudo cerrar la sesión.')
+        return
+      }
+      setGatewayUser(null)
+      setGatewayIntegrations([])
+      setGatewayStage('entry')
+      setGatewayRequestId('')
+      setGatewayMethod(null)
+      setGatewayClaims(null)
+      setGatewayDip('')
+      setGatewayError('')
+      setView('gateway')
+    } catch {
+      showToast('No se pudo conectar con PlacetaID para cerrar la sesión.')
+    }
   }
 
   function rejectLegalDocuments() {
     setGatewayStage('entry')
-    setGatewayUserId('')
+    setGatewayRequestId('')
+    setGatewayMethod(null)
+    setGatewayUser(null)
     setGatewayError('Para usar PlacetaID debes aceptar los términos y la política de privacidad.')
   }
 
@@ -535,24 +810,55 @@ function App() {
     showToast(next === 'authorized' ? 'Integración autorizada' : 'Integración desactivada')
   }
 
-  function addIntegration(event: FormEvent<HTMLFormElement>) {
+  async function addIntegration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const name = newAppName.trim()
     if (!name) return
-    const id = `app-${Date.now()}`
-    const item: Integration = {
-      id, name, category: 'Nueva integración', initials: name.slice(0, 2).toUpperCase(), color: 'slate', status: 'pending', minAge: 0,
-      roles: ['administrador', 'miembro'], scopes: { email: false, phone: false, photo: false, identityVerified: false }, updated: 'Solicitud · ahora',
-      services: [{ id: 'general', name: 'Acceso general', description: 'Servicio principal', enabled: true, minAge: 0, roles: null }],
+    setCreatingApp(true)
+    setNewAppError('')
+    try {
+      const response = await fetch('/api/admin/apps', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name,
+          category: newAppCategory.trim() || 'Ecosistema',
+          description: newAppDescription.trim(),
+          redirectUris: [newAppRedirectUri.trim()],
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        setNewAppError(payload.message || 'No se pudo guardar la integración en Supabase.')
+        return
+      }
+      if (!payload.app?.id || !payload.app?.clientId || !payload.clientSecret) {
+        throw new Error('Supabase creó la aplicación, pero no devolvió sus credenciales.')
+      }
+      const item: Integration = { ...payload.app, updated: 'Ahora' }
+      setIntegrations((current) => [item, ...current.filter((existing) => existing.id !== item.id)])
+      setSelectedId(item.id)
+      setNewAppCredential({ clientId: item.clientId || '', clientSecret: payload.clientSecret })
+      setStatusFilter('all')
+      addAudit('Nueva solicitud de integración guardada en Supabase', name)
+      showToast('Aplicación creada en Supabase')
+    } catch (error) {
+      setNewAppError(error instanceof Error ? error.message : 'No se pudo conectar con la API.')
+    } finally {
+      setCreatingApp(false)
     }
-    setIntegrations((current) => [item, ...current])
-    setSelectedId(id)
-    setNewAppName('')
-    setNewAppOpen(false)
-    setStatusFilter('all')
-    setView('applications')
-    addAudit('Nueva solicitud de integración', name)
-    showToast('Solicitud añadida al catálogo')
+  }
+
+  async function copyCredential(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      showToast('Copiado al portapapeles')
+    } catch {
+      showToast('No se pudo copiar. Selecciona el valor manualmente.')
+    }
   }
 
   function toggleRole(id: string, role: Role) {
@@ -591,19 +897,20 @@ function App() {
   }
 
   const scopes: { id: ProtectedField; label: string; note: string }[] = [
+    { id: 'dip', label: 'DIP', note: 'Identificador personal; solo si el titular lo acepta explícitamente' },
     { id: 'email', label: 'Correo electrónico', note: 'Requiere consentimiento individual' },
     { id: 'phone', label: 'Número de teléfono', note: 'Requiere consentimiento individual' },
     { id: 'photo', label: 'Fotografía de perfil', note: 'Requiere consentimiento individual' },
     { id: 'identityVerified', label: 'Identidad verificada', note: 'Solo resultado; el documento nunca se comparte' },
   ]
   const personalPermissionRows = gatewayUser
-    ? integrations.flatMap((app) => scopes.filter((scope) => app.scopes[scope.id]).map((scope) => ({ app, scope, record: gatewayUser.permissions.find((permission) => permission.appId === app.id && permission.field === scope.id) })))
+    ? gatewayIntegrations.flatMap((app) => scopes.filter((scope) => app.scopes[scope.id]).map((scope) => ({ app, scope, record: gatewayUser.permissions.find((permission) => permission.appId === app.id && permission.field === scope.id) })))
     : []
 
   return (
     <div className={isPublicView ? 'public-shell' : 'app-shell'}>
       {!isPublicView && <aside className="sidebar">
-        <a className="brand" href="#inicio" aria-label="PlacetaID v27 inicio" onClick={(event) => { event.preventDefault(); setView('gateway'); setGatewayStage('entry'); setGatewayUserId(''); setGatewayDip('') }}>
+        <a className="brand" href="#inicio" aria-label="PlacetaID v27 inicio" onClick={(event) => { event.preventDefault(); setView('gateway') }}>
           <span className="brand-mark"><Fingerprint size={22} strokeWidth={1.8} /></span>
           <span className="brand-copy"><strong>placeta<span>id</span></strong><small>GOBIERNO DE IDENTIDAD</small></span>
           <span className="version-tag">27</span>
@@ -634,13 +941,13 @@ function App() {
 
       <main className={isPublicView ? 'public-main' : 'main-area'}>
         {isPublicView ? <>
-          <header className="public-topbar"><button className="public-brand" onClick={() => { setView('gateway'); setGatewayStage('entry'); setGatewayUserId(''); setGatewayDip('') }}><span className="brand-mark"><Fingerprint size={21} /></span><span><strong>placeta<span>id</span></strong><small>IDENTIDAD DIGITAL</small></span></button><div className="public-topbar-actions">{view === 'myPermissions' && <button className="public-action" onClick={() => setView('gateway')}><ArrowRight className="back-arrow" size={15} />Pasarela</button>}{gatewayStage === 'authenticated' && gatewayUser && view === 'gateway' && <button className="public-action" onClick={() => setView('myPermissions')}><LockKeyhole size={15} />Mis permisos</button>}<button className="admin-entry" onClick={() => setView('applications')}><LockKeyhole size={14} />Administración</button></div></header>
+          <header className="public-topbar"><button className="public-brand" onClick={() => setView('gateway')}><span className="brand-mark"><Fingerprint size={21} /></span><span><strong>placeta<span>id</span></strong><small>IDENTIDAD DIGITAL</small></span></button><div className="public-topbar-actions">{view === 'myPermissions' && <button className="public-action" onClick={() => setView('gateway')}><ArrowRight className="back-arrow" size={15} />Pasarela</button>}{gatewayStage === 'authenticated' && gatewayUser && view === 'gateway' && <button className="public-action" onClick={() => setView('myPermissions')}><LockKeyhole size={15} />Mis permisos</button>}{gatewayStage === 'authenticated' && gatewayUser && <button className="public-action" onClick={() => void logoutGatewayUser()}>Cerrar sesión</button>}<button className="admin-entry" onClick={() => setView('applications')}><LockKeyhole size={14} />Administración</button></div></header>
         </> : <>
           <header className="topbar">
             <div className="breadcrumbs"><span>PlacetaID</span><ChevronRight size={14} /><strong>{{ applications: 'Aplicaciones', users: 'Usuarios', permissions: 'Permisos personales', gateway: 'Pasarela DIP', myPermissions: 'Mis permisos', simulator: 'Simulador de acceso', activity: 'Registro de actividad' }[view]}</strong></div>
-            <div className="topbar-actions"><span className="environment-pill"><span />ENTORNO DE PRUEBA</span><button className="icon-button" aria-label="Notificaciones" onClick={() => showToast('No hay notificaciones nuevas')}><Bell size={17} /><i /></button><span className="topbar-divider" /><span className="topbar-admin">AM</span></div>
+            <div className="topbar-actions"><span className={`environment-pill system-${supabaseStatus}`}><span />{supabaseStatus === 'ready' ? 'SUPABASE EN LÍNEA' : supabaseStatus === 'checking' ? 'CONECTANDO…' : supabaseStatus === 'migration' ? 'MIGRACIÓN PENDIENTE' : 'API SIN CONEXIÓN'}</span><button className="icon-button" aria-label="Notificaciones" onClick={() => showToast('No hay notificaciones nuevas')}><Bell size={17} /><i /></button><span className="topbar-divider" /><span className="topbar-admin">AM</span></div>
           </header>
-          <div className="prototype-banner"><Sparkles size={15} /><span><strong>Vista previa v27</strong><span>Los cambios se guardan en este navegador y aún no aplican en PlacetaID.</span></span><button onClick={() => showToast('La conexión del backend se habilitará en una siguiente fase')}>Estado del sistema <ArrowRight size={14} /></button></div>
+          <div className={`prototype-banner system-banner-${supabaseStatus}`}><Sparkles size={15} /><span><strong>{supabaseStatus === 'ready' ? deviceBridgeConfigured ? 'PlacetaID v27 · conectado' : 'Supabase conectado · puente de dispositivos pendiente' : supabaseStatus === 'checking' ? 'Comprobando el servicio' : supabaseStatus === 'migration' ? 'Falta aplicar la migración' : 'PlacetaID no está conectado'}</strong><span>{supabaseStatus === 'ready' ? deviceBridgeConfigured ? 'Aplicaciones y autenticación usan Supabase; el puente seguro de dispositivos está configurado.' : 'Supabase está activo, pero falta configurar PLACETAID_V27_DEVICE_KEY en el servidor para sincronizar los dispositivos.' : supabaseStatus === 'migration' ? 'Aplica la migración v27 antes de usar el catálogo.' : supabaseStatus === 'offline' ? 'Comprueba el servidor API y las credenciales de Supabase.' : 'Verificando API y tablas de Supabase…'}</span></span><button onClick={() => fetch('/api/health').then((response) => response.json()).then((health) => { setSupabaseStatus(health.ok ? 'ready' : health.migrationRequired ? 'migration' : 'offline'); setDeviceBridgeConfigured(health.deviceBridgeConfigured === true); showToast(health.ok ? 'Conexión Supabase verificada' : 'Supabase necesita atención') }).catch(() => { setSupabaseStatus('offline'); showToast('No se pudo contactar con la API') })}>Comprobar <ArrowRight size={14} /></button></div>
         </>}
 
         {view === 'home' && <div className="public-home">
@@ -656,7 +963,7 @@ function App() {
           <div className="page-content">
             <section className="page-heading">
               <div><div className="eyebrow"><span className="eyebrow-line" />GOBIERNO DE ACCESO</div><h1>Aplicaciones</h1><p>Decide qué servicios del ecosistema pueden usar PlacetaID y bajo qué condiciones.</p></div>
-              <button className="button-primary" onClick={() => setNewAppOpen(true)}><Plus size={16} />Nueva integración</button>
+              <button className="button-primary" disabled={supabaseStatus !== 'ready' || !adminToken} onClick={() => { setNewAppCredential(null); setNewAppError(''); setNewAppOpen(true) }}><Plus size={16} />Nueva integración</button>
             </section>
 
             <section className="metrics-row" aria-label="Resumen del catálogo">
@@ -705,9 +1012,9 @@ function App() {
                 </div>
 
                 <div className="policy-section data-section"><div className="policy-section-heading"><div><h3>Datos de la identidad</h3><p>Los datos protegidos requieren consentimiento</p></div><UserRound size={16} /></div>
-                  <div className="basic-data-list">{['Login correcto', 'Mayor de 16 / 18', 'Nombre y apellidos', 'DIP'].map((item) => <span key={item}><Check size={11} />{item}<small>Siempre</small></span>)}</div>
-                  <div className="basic-data-caption">Datos básicos entregados al autenticar. El documento de identidad nunca se comparte.</div>
-                  <div className="scope-list">{scopes.map((scope) => <div className={`scope-row ${scope.id === 'email' ? 'scope-sensitive' : ''}`} key={scope.id}><span className="scope-copy"><strong>{scope.label}{scope.id === 'email' && <span className="sensitive-tag">PROTEGIDO</span>}</strong><small>{scope.note}</small></span><label className="data-policy-control"><span>Acceso</span><select aria-label={`Acceso a ${scope.label}`} value={selected.scopes[scope.id] ? 'consent' : 'never'} onChange={(event) => { const canRequest = event.target.value === 'consent'; updateIntegration(selected.id, (item) => ({ ...item, scopes: { ...item.scopes, [scope.id]: canRequest }, updated: 'Ahora' })); addAudit('Política de dato protegido modificada', `${selected.name} · ${scope.label} · ${canRequest ? 'Con consentimiento' : 'Nunca'}`) }}><option value="never">Nunca</option><option value="consent">Si acepta</option></select><ChevronDown size={11} /></label></div>)}</div>
+                  <div className="basic-data-list">{['Login correcto', 'Mayor de 16 / 18', 'Nombre y apellidos'].map((item) => <span key={item}><Check size={11} />{item}<small>Siempre</small></span>)}</div>
+                  <div className="basic-data-caption">El DIP es un dato protegido que requiere permiso administrativo y consentimiento expreso del titular.</div>
+                  <div className="scope-list">{scopes.map((scope) => <div className={`scope-row ${scope.id === 'email' || scope.id === 'dip' ? 'scope-sensitive' : ''}`} key={scope.id}><span className="scope-copy"><strong>{scope.label}{(scope.id === 'email' || scope.id === 'dip') && <span className="sensitive-tag">PROTEGIDO</span>}</strong><small>{scope.note}</small></span><label className="data-policy-control"><span>Acceso</span><select aria-label={`Acceso a ${scope.label}`} value={selected.scopes[scope.id] ? 'consent' : 'never'} onChange={(event) => { const canRequest = event.target.value === 'consent'; updateIntegration(selected.id, (item) => ({ ...item, scopes: { ...item.scopes, [scope.id]: canRequest }, updated: 'Ahora' })); addAudit('Política de dato protegido modificada', `${selected.name} · ${scope.label} · ${canRequest ? 'Con consentimiento' : 'Nunca'}`) }}><option value="never">Nunca</option><option value="consent">Si acepta</option></select><ChevronDown size={11} /></label></div>)}</div>
                 </div>
                 <div className="policy-footer"><span><Shield size={14} />Modificado: {selected.updated}</span><button onClick={() => { setView('simulator'); changeSimApp(selected.id) }}>Probar acceso <ArrowRight size={14} /></button></div>
               </aside>}
@@ -744,53 +1051,61 @@ function App() {
           <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />CONSENTIMIENTO DEL TITULAR</div><h1>Permisos personales</h1><p>Los permisos son específicos por aplicación y por dato; el titular puede revocarlos en cualquier momento.</p></div><span className="simulator-tag"><LockKeyhole size={14} />CONTROL DEL USUARIO</span></section>
           <section className="permissions-panel"><div className="permissions-toolbar"><div><h2>Permisos del titular</h2><p>Administración consulta el estado. Solo el titular puede conceder o revocar.</p></div><label className="permission-user-select"><UserRound size={15} /><select aria-label="Usuario titular" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>{users.map((user) => <option value={user.id} key={user.id}>{user.name} {user.surname} · {user.placeid}</option>)}</select><ChevronDown size={13} /></label></div>
             {selectedUser && <div className="consent-owner"><span className="user-avatar">{selectedUser.name.slice(0, 1)}{selectedUser.surname.slice(0, 1)}</span><div><strong>{selectedUser.name} {selectedUser.surname}</strong><small>{selectedUser.placeid} · {selectedUser.dip}</small></div><span>{selectedUser.permissions.filter((permission) => permission.status === 'pending').length} pendientes</span></div>}
-            <div className="consent-requests-list">{(selectedUser?.permissions ?? []).map((permission) => { const app = integrations.find((item) => item.id === permission.appId); const allowedByAdmin = Boolean(app?.scopes[permission.field] && app.status === 'authorized'); return <article className="consent-request-row" key={`${permission.appId}-${permission.field}`}><span className={`consent-field-icon consent-field-${permission.field}`}>{permission.field === 'email' ? <Mail size={17} /> : permission.field === 'phone' ? <Phone size={17} /> : permission.field === 'photo' ? <ImageIcon size={17} /> : <BadgeCheck size={17} />}</span><div className="consent-request-copy"><div className="consent-request-title"><strong>{app?.name ?? permission.appId}</strong><span className={`consent-status consent-${permission.status}`}>{consentStatusLabel(permission.status)}</span></div><span>{protectedFieldLabel(permission.field)}</span><small>{permission.status === 'pending' ? `${app?.name ?? 'La aplicación'} quiere acceder a este dato.` : `Actualizado ${permission.updated}`}</small>{!allowedByAdmin && <small className="admin-disallowed">La aplicación no tiene autorización administrativa para solicitar este dato.</small>}</div><div className="consent-actions">{permission.status === 'pending' && <span className="admin-pending-note">Esperando decisión del titular</span>}{permission.status === 'granted' && <span className="admin-pending-note">El titular concedió el permiso</span>}{permission.status === 'denied' && <span className="admin-pending-note">El titular rechazó el permiso</span>}{permission.status === 'revoked' && <span className="admin-pending-note">El titular revocó el permiso</span>}</div></article>})}{(selectedUser?.permissions ?? []).length === 0 && <div className="consent-empty"><LockKeyhole size={19} /><strong>Sin permisos registrados</strong><span>Cuando una aplicación solicite un dato protegido, aparecerá aquí para que el titular decida.</span></div>}</div>
+            <div className="consent-requests-list">{(selectedUser?.permissions ?? []).map((permission) => { const app = integrations.find((item) => item.id === permission.appId); const allowedByAdmin = Boolean(app?.scopes[permission.field] && app.status === 'authorized'); return <article className="consent-request-row" key={`${permission.appId}-${permission.field}`}><span className={`consent-field-icon consent-field-${permission.field}`}>{permission.field === 'dip' ? <Fingerprint size={17} /> : permission.field === 'email' ? <Mail size={17} /> : permission.field === 'phone' ? <Phone size={17} /> : permission.field === 'photo' ? <ImageIcon size={17} /> : <BadgeCheck size={17} />}</span><div className="consent-request-copy"><div className="consent-request-title"><strong>{app?.name ?? permission.appId}</strong><span className={`consent-status consent-${permission.status}`}>{consentStatusLabel(permission.status)}</span></div><span>{protectedFieldLabel(permission.field)}</span><small>{permission.status === 'pending' ? `${app?.name ?? 'La aplicación'} quiere acceder a este dato.` : `Actualizado ${permission.updated}`}</small>{!allowedByAdmin && <small className="admin-disallowed">La aplicación no tiene autorización administrativa para solicitar este dato.</small>}</div><div className="consent-actions">{permission.status === 'pending' && <span className="admin-pending-note">Esperando decisión del titular</span>}{permission.status === 'granted' && <span className="admin-pending-note">El titular concedió el permiso</span>}{permission.status === 'denied' && <span className="admin-pending-note">El titular rechazó el permiso</span>}{permission.status === 'revoked' && <span className="admin-pending-note">El titular revocó el permiso</span>}</div></article>})}{(selectedUser?.permissions ?? []).length === 0 && <div className="consent-empty"><LockKeyhole size={19} /><strong>Sin permisos registrados</strong><span>Cuando una aplicación solicite un dato protegido, aparecerá aquí para que el titular decida.</span></div>}</div>
             <div className="permission-principle"><ShieldCheck size={16} /><span><strong>Consentimiento independiente.</strong> Permitir el correo no concede acceso al teléfono ni a la foto. Revocar bloquea inmediatamente ese dato en la respuesta de PlacetaID.</span></div>
           </section>
         </div>}
 
         {view === 'myPermissions' && <div className="page-content my-permissions-page">
           <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />TU CONTROL DE PRIVACIDAD</div><h1>Mis permisos</h1><p>Decide qué datos protegidos puede utilizar cada aplicación. Puedes cambiarlo cuando quieras.</p></div><span className="simulator-tag"><LockKeyhole size={14} />TITULAR</span></section>
-          {gatewayUser ? <section className="my-permissions-panel"><div className="consent-owner"><span className="user-avatar">{gatewayUser.name.slice(0, 1)}{gatewayUser.surname.slice(0, 1)}</span><div><strong>{gatewayUser.name} {gatewayUser.surname}</strong><small>{gatewayUser.placeid} · Identidad verificada en PlacetaID</small></div><span>{personalPermissionRows.filter((row) => row.record?.status === 'granted').length} concedidos</span></div><div className="my-permission-list">{personalPermissionRows.map(({ app, scope, record }) => <article className="my-permission-row" key={`${app.id}-${scope.id}`}><span className={`consent-field-icon consent-field-${scope.id}`}>{scope.id === 'email' ? <Mail size={17} /> : scope.id === 'phone' ? <Phone size={17} /> : scope.id === 'photo' ? <ImageIcon size={17} /> : <BadgeCheck size={17} />}</span><span className="my-permission-copy"><strong>{app.name}</strong><span>{scope.label}</span><small>{record ? `Actualizado ${record.updated}` : 'Este permiso todavía no ha sido concedido.'}</small></span><span className={`consent-status consent-${record?.status ?? 'revoked'}`}>{record ? consentStatusLabel(record.status) : 'No concedido'}</span>{record?.status === 'granted' ? <button className="button-quiet revoke-button" onClick={() => updateConsent(gatewayUser.id, app.id, scope.id, 'revoked')}>Revocar</button> : !record || record.status === 'denied' || record.status === 'revoked' ? <button className="button-quiet" disabled={!app.scopes[scope.id] || app.status !== 'authorized'} onClick={() => requestConsent(gatewayUser.id, app.id, scope.id)}>Solicitar permiso</button> : <span className="admin-pending-note">Solicitud pendiente</span>}</article>)}</div><div className="permission-principle"><ShieldCheck size={16} /><span><strong>Tu decisión es independiente por aplicación y dato.</strong> Si revocas un permiso, ese dato deja de incluirse en las siguientes respuestas de PlacetaID.</span></div></section> : <section className="my-permissions-panel my-permissions-locked"><LockKeyhole size={20} /><strong>Identifícate para revisar tus permisos</strong><button className="button-primary" onClick={() => setView('gateway')}>Ir a la pasarela <ArrowRight size={14} /></button></section>}
+          {gatewayUser ? <section className="my-permissions-panel"><div className="consent-owner"><span className="user-avatar">{gatewayUser.name.slice(0, 1)}{gatewayUser.surname.slice(0, 1)}</span><div><strong>{gatewayUser.name} {gatewayUser.surname}</strong><small>{gatewayUser.placeid} · Identidad verificada en PlacetaID</small></div><span>{personalPermissionRows.filter((row) => row.record?.status === 'granted').length} concedidos</span></div><div className="my-permission-list">{personalPermissionRows.map(({ app, scope, record }) => <article className="my-permission-row" key={`${app.id}-${scope.id}`}><span className={`consent-field-icon consent-field-${scope.id}`}>{scope.id === 'dip' ? <Fingerprint size={17} /> : scope.id === 'email' ? <Mail size={17} /> : scope.id === 'phone' ? <Phone size={17} /> : scope.id === 'photo' ? <ImageIcon size={17} /> : <BadgeCheck size={17} />}</span><span className="my-permission-copy"><strong>{app.name}</strong><span>{scope.label}</span><small>{record ? `Actualizado ${record.updated}` : 'Este permiso todavía no ha sido concedido.'}</small></span><span className={`consent-status consent-${record?.status ?? 'revoked'}`}>{record ? consentStatusLabel(record.status) : 'No concedido'}</span>{record?.status === 'granted' ? <button className="button-quiet revoke-button" onClick={() => updateConsent(gatewayUser.id, app.id, scope.id, 'revoked')}>Revocar</button> : !record || record.status === 'denied' || record.status === 'revoked' ? <button className="button-quiet" disabled={!app.scopes[scope.id] || app.status !== 'authorized'} onClick={() => requestConsent(gatewayUser.id, app.id, scope.id)}>Solicitar permiso</button> : <span className="admin-pending-note">Solicitud pendiente</span>}</article>)}</div><div className="permission-principle"><ShieldCheck size={16} /><span><strong>Tu decisión es independiente por aplicación y dato.</strong> Si revocas un permiso, ese dato deja de incluirse en las siguientes respuestas de PlacetaID.</span></div></section> : <section className="my-permissions-panel my-permissions-locked"><LockKeyhole size={20} /><strong>Identifícate para revisar tus permisos</strong><button className="button-primary" onClick={() => setView('gateway')}>Ir a la pasarela <ArrowRight size={14} /></button></section>}
         </div>}
 
         {view === 'gateway' && <div className="page-content gateway-page" data-gateway-stage={gatewayStage}>
-          <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />AUTENTICACIÓN SIN CONTRASEÑA</div><h1>Pasarela PlacetaID</h1><p>El DIP localiza la identidad; PlacetaID detecta automáticamente la sesión disponible.</p></div><span className="simulator-tag"><Fingerprint size={14} />FLUJO DE PRUEBA</span></section>
-          <div className="gateway-layout"><section className="gateway-flow-panel"><h1 className="gateway-wordmark">PlacetaID</h1><p className="gateway-tagline">La identificación de La Placeta</p><div className="gateway-step-heading"><span className={`step-number ${gatewayStage !== 'entry' ? 'step-complete' : ''}`}>{gatewayStage === 'entry' ? '01' : <Check size={13} />}</span><div><h2>Identifica tu cuenta</h2><p>Introduce tu DIP asociado a PlacetaID.</p></div></div>
-            {gatewayStage === 'entry' ? <form className="gateway-form" onSubmit={submitGatewayDip}><label className="field-label" htmlFor="gateway-dip">DIP</label><input id="gateway-dip" className="gateway-dip-input" value={gatewayDip} onChange={(event) => { setGatewayDip(event.target.value.toUpperCase()); setGatewayError('') }} placeholder="12345678Z" maxLength={11} autoComplete="off" required /><p className="gateway-input-note"><LockKeyhole size={13} />El DIP identifica la cuenta. No es una contraseña.</p>{gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}<button className="button-primary gateway-continue" type="submit">Continuar <ArrowRight size={15} /></button></form> : <div className="gateway-identified"><span className="user-avatar user-avatar-large">{gatewayUser?.name.slice(0, 1)}{gatewayUser?.surname.slice(0, 1)}</span><div><strong>{gatewayUser?.name} {gatewayUser?.surname}</strong><small>{gatewayUser?.placeid} · Identidad localizada</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayUserId(''); setGatewayError('') }}>Cambiar DIP</button></div>}
-
-            {gatewayStage === 'detected' && gatewayUser && <div className="method-detection"><div className="gateway-step-heading"><span className="step-number">02</span><div><h2>Método detectado</h2><p>PlacetaID elige la sesión disponible de mayor prioridad.</p></div></div><div className="priority-method-list">{[{ id: 'mobile', label: 'PlacetaID móvil', note: 'Sesión activa en tu teléfono', icon: <Smartphone size={16} />, available: gatewayUser.auth.mobile }, { id: 'authenticator', label: 'Autentificador', note: 'Sesión válida en el autenticador', icon: <KeyRound size={16} />, available: gatewayUser.auth.authenticator }, { id: 'desktop', label: 'PlacetaID Desktop', note: 'Cliente de escritorio vinculado', icon: <Monitor size={16} />, available: gatewayUser.auth.desktop }].map((method) => <div className={`priority-method ${authMethod(gatewayUser) === method.id ? 'priority-method-selected' : ''} ${!method.available ? 'priority-method-off' : ''}`} key={method.id}><span className="priority-method-icon">{method.icon}</span><span><strong>{method.label}</strong><small>{method.note}</small></span><span className="priority-method-state">{authMethod(gatewayUser) === method.id ? 'SELECCIONADO' : method.available ? 'DISPONIBLE' : 'NO DISPONIBLE'}</span></div>)}</div>
-              {authMethod(gatewayUser) === 'authenticator' && <label className="field-label gateway-otp-label" htmlFor="gateway-otp">Código del Autentificador</label>}{authMethod(gatewayUser) === 'authenticator' && <input className="gateway-otp-input" id="gateway-otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={gatewayOtp} onChange={(event) => { setGatewayOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setGatewayError('') }} placeholder="000000" />}
-              {!authMethod(gatewayUser) && <div className="gateway-error gateway-no-method"><ShieldAlert size={16} />No hay una sesión vinculada. Solicita recuperación de acceso.</div>}{gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}{authMethod(gatewayUser) && <button className="button-primary gateway-continue" onClick={confirmGatewayIdentity}>{authMethod(gatewayUser) === 'mobile' ? 'Confirmar identidad en móvil' : authMethod(gatewayUser) === 'authenticator' ? 'Verificar código' : 'Continuar con PlacetaID Desktop'} <ArrowRight size={15} /></button>}
-            </div>}
-
-            {gatewayStage === 'legal' && gatewayUser && <div className="legal-consent-step"><div className="gateway-step-heading"><span className="step-number">03</span><div><h2>Antes de continuar</h2><p>Revisa y acepta los documentos de uso de PlacetaID.</p></div></div><div className="legal-document-links"><button onClick={() => setLegalDocument('terms')}><ShieldCheck size={16} /><span><strong>Términos y condiciones</strong><small>Uso de la identidad y acceso a servicios</small></span><ArrowRight size={14} /></button><button onClick={() => setLegalDocument('privacy')}><LockKeyhole size={16} /><span><strong>Política de privacidad</strong><small>Datos utilizados y control del titular</small></span><ArrowRight size={14} /></button></div><label className="legal-accept-option"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} /><span className="custom-check"><Check size={11} /></span><span>He leído y acepto los <button type="button" className="inline-legal-link" onClick={() => setLegalDocument('terms')}>términos y condiciones</button>.</span></label><label className="legal-accept-option"><input type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} /><span className="custom-check"><Check size={11} /></span><span>He leído la <button type="button" className="inline-legal-link" onClick={() => setLegalDocument('privacy')}>política de privacidad</button> y entiendo el uso de mis datos.</span></label>{gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}<div className="legal-step-actions"><button className="button-quiet" onClick={rejectLegalDocuments}>No acepto</button><button className="button-primary" disabled={!termsAccepted || !privacyAccepted} onClick={acceptLegalDocuments}>Aceptar y continuar <ArrowRight size={14} /></button></div><small className="legal-version-note">Documentos v27 · {LEGAL_VERSION}</small></div>}
-
-            {gatewayStage === 'authenticated' && gatewayUser && <div className="gateway-authenticated"><span className="gateway-auth-icon"><ShieldCheck size={18} /></span><div><strong>Identidad autenticada</strong><small>{gatewayUser.name} {gatewayUser.surname} · {gatewayUser.dip}</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayUserId(''); setGatewayError('') }}>Cerrar sesión de prueba</button></div>}
-          </section>
-
-          <section className="gateway-policy-panel"><div className="gateway-step-heading"><span className={`step-number ${gatewayStage === 'authenticated' ? 'step-complete' : ''}`}>{gatewayStage === 'authenticated' ? <Check size={13} /> : '02'}</span><div><h2>{gatewayStage === 'authenticated' ? 'Autorización de la aplicación' : 'Detección de sesión'}</h2><p>{gatewayStage === 'authenticated' ? 'Aplicación, servicio, edad y permisos personales.' : 'PlacetaID comprobará móvil, Autentificador y Desktop en ese orden.'}</p></div></div>
-            {gatewayStage !== 'authenticated' || !gatewayUser ? <div className="gateway-locked-state"><LockKeyhole size={20} /><strong>Esperando la autenticación</strong><span>La disponibilidad se comprobará después de identificar y autenticar al titular.</span></div> : <>
-              <label className="field-label" htmlFor="gateway-app">Aplicación solicitante</label><div className="select-control"><select id="gateway-app" value={gatewayAppId} onChange={(event) => { const appId = event.target.value; setGatewayAppId(appId); setGatewayServiceId(integrations.find((item) => item.id === appId)?.services[0]?.id ?? '') }}>{integrations.map((app) => <option value={app.id} key={app.id}>{app.name} · {statusLabel(app.status)}</option>)}</select><ChevronDown size={14} /></div>
-              <label className="field-label" htmlFor="gateway-service">Servicio</label><div className="select-control"><select id="gateway-service" value={gatewayService?.id ?? ''} onChange={(event) => setGatewayServiceId(event.target.value)}>{(gatewayApp?.services ?? []).map((service) => <option value={service.id} key={service.id}>{service.name}</option>)}</select><ChevronDown size={14} /></div>
-              {gatewayApp && gatewayService && <>{(() => { const decision = accessDecision(gatewayUser, gatewayApp, gatewayService); return <div className={`gateway-decision ${decision.allowed ? 'gateway-decision-allow' : 'gateway-decision-deny'}`}><span>{decision.allowed ? <ShieldCheck size={17} /> : <ShieldAlert size={17} />}</span><div><strong>{decision.allowed ? 'Acceso concedido' : 'Acceso denegado'}</strong><small>{decision.reason} · {calculateAge(gatewayUser.birthDate)} años</small></div></div>})()}
-                {accessDecision(gatewayUser, gatewayApp, gatewayService).allowed && <div className="gateway-consent-list"><div className="consent-list-title"><h3>Datos protegidos</h3><span>Solo se entregan con tu permiso</span></div>{scopes.filter((scope) => gatewayApp.scopes[scope.id]).map((scope) => { const record = gatewayUser.permissions.find((permission) => permission.appId === gatewayApp.id && permission.field === scope.id); const status = record?.status; return <div className="gateway-consent-row" key={scope.id}><span className="consent-field-icon">{scope.id === 'email' ? <Mail size={15} /> : scope.id === 'phone' ? <Phone size={15} /> : scope.id === 'photo' ? <ImageIcon size={15} /> : <BadgeCheck size={15} />}</span><div><strong>{gatewayApp.name} quiere acceder a {scope.label.toLowerCase()}</strong><small>{status === 'granted' ? `Permiso concedido · ${record?.updated}` : status === 'pending' ? 'Esta solicitud espera tu decisión.' : status === 'revoked' ? 'Has revocado este permiso.' : status === 'denied' ? 'No has permitido este dato.' : 'Esta aplicación solicita permiso para utilizar este dato.'}</small></div><div className="gateway-consent-actions">{status === 'pending' && <button className="consent-review-button" onClick={() => setConsentPrompt({ userId: gatewayUser.id, appId: gatewayApp.id, field: scope.id })}>Revisar solicitud</button>}{status === 'granted' && <button className="consent-revoke-button" onClick={() => updateConsent(gatewayUser.id, gatewayApp.id, scope.id, 'revoked')}>Revocar</button>}{(!status || status === 'denied' || status === 'revoked') && <button className="consent-request-button" onClick={() => requestConsent(gatewayUser.id, gatewayApp.id, scope.id)}>{status ? 'Solicitar de nuevo' : 'Solicitar permiso'}</button>}</div></div>})}</div>}
-                <div className="gateway-response"><div className="payload-heading"><div><h3>Respuesta de PlacetaID</h3><p>Sin documento de identidad ni datos sin permiso</p></div><span className="json-chip">JSON</span></div><pre className="payload-code">{JSON.stringify(accessDecision(gatewayUser, gatewayApp, gatewayService).allowed ? {
-                  login_correct: true,
-                  over_16: calculateAge(gatewayUser.birthDate) >= 16,
-                  over_18: calculateAge(gatewayUser.birthDate) >= 18,
-                  name: gatewayUser.name,
-                  surname: gatewayUser.surname,
-                  dip: gatewayUser.dip,
-                  ...(gatewayApp.scopes.email && gatewayUser.permissions.some((permission) => permission.appId === gatewayApp.id && permission.field === 'email' && permission.status === 'granted') ? { email: gatewayUser.email } : {}),
-                  ...(gatewayApp.scopes.phone && gatewayUser.permissions.some((permission) => permission.appId === gatewayApp.id && permission.field === 'phone' && permission.status === 'granted') ? { phone: gatewayUser.phone } : {}),
-                  ...(gatewayApp.scopes.photo && gatewayUser.permissions.some((permission) => permission.appId === gatewayApp.id && permission.field === 'photo' && permission.status === 'granted') ? { profile_photo: `/demo/${gatewayUser.id}/avatar` } : {}),
-                  ...(gatewayApp.scopes.identityVerified && gatewayUser.identityVerified && gatewayUser.permissions.some((permission) => permission.appId === gatewayApp.id && permission.field === 'identityVerified' && permission.status === 'granted') ? { identity_verified: true } : {}),
-                } : { login_correct: false }, null, 2)}</pre></div>
-              </>}
-            </>}
-          </section></div>
-          <div className="gateway-privacy-footer"><LockKeyhole size={14} /><span>El documento de identidad permanece cifrado en PlacetaID. Esta pasarela es una simulación local, no autentica cuentas reales.</span></div>
+          <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />AUTENTICACIÓN SEGURA</div><h1>Accede con PlacetaID</h1><p>Tu DIP localiza la identidad. El acceso se confirma con un método vinculado a tu cuenta.</p></div><span className={`simulator-tag system-${supabaseStatus}`}><Fingerprint size={14} />{supabaseStatus === 'ready' ? 'SUPABASE ACTIVO' : 'SERVICIO NO DISPONIBLE'}</span></section>
+          <div className="gateway-layout">
+            <section className="gateway-flow-panel">
+              <h1 className="gateway-wordmark">PlacetaID</h1>
+              <p className="gateway-tagline">Una identidad, acceso seguro</p>
+              <div className="gateway-step-heading"><span className={`step-number ${gatewayStage !== 'entry' ? 'step-complete' : ''}`}>{gatewayStage === 'entry' ? '01' : <Check size={13} />}</span><div><h2>Identifica tu cuenta</h2><p>Introduce el DIP asociado a PlacetaID.</p></div></div>
+              {gatewayStage === 'entry' && <form className="gateway-form" onSubmit={submitGatewayDip}>
+                <label className="field-label" htmlFor="gateway-dip">DIP</label>
+                <input id="gateway-dip" className="gateway-dip-input" value={gatewayDip} onChange={(event) => { setGatewayDip(event.target.value.toUpperCase()); setGatewayError('') }} placeholder="12345678Z" maxLength={11} autoComplete="username" required />
+                <p className="gateway-input-note"><LockKeyhole size={13} />El DIP solo localiza la identidad; no permite iniciar sesión por sí solo.</p>
+                {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+                <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || supabaseStatus !== 'ready'}>{gatewayBusy ? 'Buscando identidad…' : 'Continuar'} <ArrowRight size={15} /></button>
+              </form>}
+              {gatewayStage === 'detected' && <div className="method-detection">
+                <div className="gateway-identified"><span className="user-avatar user-avatar-large"><Fingerprint size={20} /></span><div><strong>Cuenta localizada</strong><small>Datos personales ocultos hasta completar la autenticación</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayRequestId(''); setGatewayMethod(null); setGatewayError('') }}>Cambiar DIP</button></div>
+                <div className="gateway-step-heading"><span className="step-number">02</span><div><h2>Confirma tu identidad</h2><p>{gatewayMethod === 'mobile' ? 'Aprueba la solicitud en PlacetaID móvil.' : gatewayMethod === 'desktop' ? 'Aprueba la solicitud en PlacetaID Desktop.' : 'Introduce el código actual de tu Autentificador.'}</p></div></div>
+                <div className="priority-method priority-method-selected"><span className="priority-method-icon">{gatewayMethod === 'mobile' ? <Smartphone size={16} /> : gatewayMethod === 'desktop' ? <Monitor size={16} /> : <KeyRound size={16} />}</span><span><strong>{gatewayMethod === 'mobile' ? 'PlacetaID móvil' : gatewayMethod === 'desktop' ? 'PlacetaID Desktop' : 'Autentificador'}</strong><small>Solicitud protegida y temporal</small></span><span className="priority-method-state">VINCULADO</span></div>
+                {gatewayMethod === 'authenticator' && <><label className="field-label gateway-otp-label" htmlFor="gateway-otp">Código de seis cifras</label><input className="gateway-otp-input" id="gateway-otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={gatewayOtp} onChange={(event) => { setGatewayOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setGatewayError('') }} placeholder="000000" /></>}
+                {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+                <button className="button-primary gateway-continue" disabled={gatewayBusy} onClick={confirmGatewayIdentity}>{gatewayBusy ? 'Esperando confirmación segura…' : gatewayMethod === 'authenticator' ? 'Verificar código' : 'Esperar aprobación del dispositivo'} <ArrowRight size={15} /></button>
+              </div>}
+              {gatewayStage === 'legal' && <div className="legal-consent-step">
+                <div className="gateway-step-heading"><span className="step-number">03</span><div><h2>Revisa los documentos</h2><p>La aceptación se registrará en Supabase.</p></div></div>
+                <div className="legal-document-links"><button onClick={() => setLegalDocument('terms')}><ShieldCheck size={16} /><span><strong>Términos y condiciones</strong><small>Uso de la identidad y acceso a servicios</small></span><ArrowRight size={14} /></button><button onClick={() => setLegalDocument('privacy')}><LockKeyhole size={16} /><span><strong>Política de privacidad</strong><small>Datos utilizados y control del titular</small></span><ArrowRight size={14} /></button></div>
+                <label className="legal-accept-option"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} /><span className="custom-check"><Check size={11} /></span><span>He leído y acepto los <button type="button" className="inline-legal-link" onClick={() => setLegalDocument('terms')}>términos y condiciones</button>.</span></label>
+                <label className="legal-accept-option"><input type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} /><span className="custom-check"><Check size={11} /></span><span>He leído la <button type="button" className="inline-legal-link" onClick={() => setLegalDocument('privacy')}>política de privacidad</button>.</span></label>
+                {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+                <div className="legal-step-actions"><button className="button-quiet" onClick={rejectLegalDocuments}>No acepto</button><button className="button-primary" disabled={!termsAccepted || !privacyAccepted || gatewayBusy} onClick={acceptLegalDocuments}>{gatewayBusy ? 'Guardando…' : 'Aceptar y continuar'} <ArrowRight size={14} /></button></div>
+                <small className="legal-version-note">Documentos v27 · {LEGAL_VERSION}</small>
+              </div>}
+              {gatewayStage === 'consent' && <div className="legal-consent-step">
+                <div className="gateway-step-heading"><span className="step-number">04</span><div><h2>Permisos de datos</h2><p>{gatewayAppName || 'La aplicación'} solicita acceso a estos datos protegidos.</p></div></div>
+                {gatewayConsentFields.map((field) => <div className="gateway-consent-row" key={field}><span className="consent-field-icon">{field === 'dip' ? <Fingerprint size={15} /> : field === 'email' ? <Mail size={15} /> : field === 'phone' ? <Phone size={15} /> : field === 'photo' ? <ImageIcon size={15} /> : <BadgeCheck size={15} />}</span><div><strong>{protectedFieldLabel(field)}</strong><small>{field === 'dip' ? 'El DIP permite identificarte en Nexe. Solo se compartirá si lo autorizas expresamente.' : 'El permiso es específico para esta aplicación y se puede revocar.'}</small></div><div className="gateway-consent-actions"><button className="consent-revoke-button" disabled={gatewayBusy} onClick={() => void decideGatewayConsent(field, 'denied')}>No permitir</button><button className="consent-review-button" disabled={gatewayBusy} onClick={() => void decideGatewayConsent(field, 'granted')}>Permitir</button></div></div>)}
+                {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+              </div>}
+              {gatewayStage === 'authenticated' && <div className="gateway-authenticated"><span className="gateway-auth-icon"><ShieldCheck size={18} /></span><div><strong>Identidad autenticada</strong><small>{gatewayUser ? `${gatewayUser.name} ${gatewayUser.surname} · ${gatewayUser.placeid}` : 'Acceso confirmado por PlacetaID'}</small></div></div>}
+            </section>
+            <section className="gateway-policy-panel">
+              <div className="gateway-step-heading"><span className={`step-number ${gatewayStage === 'authenticated' ? 'step-complete' : ''}`}>{gatewayStage === 'authenticated' ? <Check size={13} /> : '02'}</span><div><h2>{gatewayStage === 'authenticated' ? 'Acceso concedido' : gatewayAppName || 'Solicitud de acceso'}</h2><p>{gatewayServiceName || (initialGatewayRequest.bound ? 'Acceso delegado desde una aplicación registrada.' : 'Inicio de sesión seguro en PlacetaID.')}</p></div></div>
+              {gatewayStage !== 'authenticated' ? <div className="gateway-locked-state"><LockKeyhole size={20} /><strong>{gatewayStage === 'entry' ? 'Esperando la identidad' : 'Autenticación en curso'}</strong><span>Las reglas de aplicación, servicio, edad y permisos se verifican en el servidor.</span></div> : <div className="gateway-response"><div className="payload-heading"><div><h3>Respuesta de PlacetaID</h3><p>Emitida por el servidor tras verificar la cuenta</p></div><span className="json-chip">JSON</span></div><pre className="payload-code">{JSON.stringify(gatewayClaims || { login_correct: true }, null, 2)}</pre></div>}
+            </section>
+          </div>
+          {gatewayError && gatewayStage !== 'entry' && gatewayStage !== 'detected' && <p className="gateway-error" role="alert">{gatewayError}</p>}
+          <div className="gateway-privacy-footer"><LockKeyhole size={14} /><span>El DIP no autentica por sí solo. Las credenciales y decisiones se verifican y registran en Supabase.</span></div>
         </div>}
 
         {view === 'simulator' && <div className="page-content simulator-page">
@@ -815,7 +1130,7 @@ function App() {
               over_18: simAge >= 18,
               name: simIdentity?.name,
               surname: simIdentity?.surname,
-              dip: simIdentity?.dip,
+              ...(simApp.scopes.dip && simIdentity?.permissions.some((permission) => permission.appId === simApp.id && permission.field === 'dip' && permission.status === 'granted') ? { dip: simIdentity.dip } : {}),
               ...(simApp.scopes.email && simIdentity?.permissions.some((permission) => permission.appId === simApp.id && permission.field === 'email' && permission.status === 'granted') ? { email: simIdentity.email } : {}),
               ...(simApp.scopes.phone && simIdentity?.permissions.some((permission) => permission.appId === simApp.id && permission.field === 'phone' && permission.status === 'granted') ? { phone: simIdentity.phone } : {}),
               ...(simApp.scopes.photo && simIdentity?.permissions.some((permission) => permission.appId === simApp.id && permission.field === 'photo' && permission.status === 'granted') ? { profile_photo: `/demo/${simIdentity.id}/avatar` } : {}),
@@ -829,7 +1144,7 @@ function App() {
         {isPublicView ? <footer className="public-footer"><span>PlacetaID v27.0 <i>·</i> Plan 2027 · Ámbito 25</span><span>Maqueta de transición · 2026—2027</span></footer> : <footer className="app-footer"><span><span className="footer-mark"><Fingerprint size={13} /></span>PlacetaID v27.0 <span className="footer-dot">·</span> Gobierno de identidad</span><span>Panel de Administración <span className="footer-dot">·</span> Vista previa</span></footer>}
       </main>
 
-      {newAppOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewAppOpen(false) }}><form className="integration-modal" onSubmit={addIntegration}><div className="modal-topline"><span className="modal-icon"><Plus size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" onClick={() => setNewAppOpen(false)}><X size={17} /></button></div><h2>Nueva integración</h2><p>Registra una aplicación para que Administración revise su solicitud de acceso.</p><label className="field-label" htmlFor="new-app-name">Nombre de la aplicación</label><input className="modal-input" id="new-app-name" autoFocus maxLength={60} value={newAppName} onChange={(event) => setNewAppName(event.target.value)} placeholder="Ej. Portal de servicios" required /><div className="modal-info"><ShieldAlert size={15} /><span>La nueva integración quedará pendiente y no podrá autenticar usuarios hasta ser autorizada.</span></div><div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setNewAppOpen(false)}>Cancelar</button><button className="button-primary" type="submit"><Plus size={15} />Añadir solicitud</button></div></form></div>}
+      {newAppOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingApp) setNewAppOpen(false) }}><form className="integration-modal" onSubmit={addIntegration}><div className="modal-topline"><span className="modal-icon"><Plus size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" onClick={() => setNewAppOpen(false)}><X size={17} /></button></div><h2>{newAppCredential ? 'Aplicación registrada' : 'Nueva integración'}</h2><p>{newAppCredential ? 'Las credenciales se muestran ahora una sola vez. Guárdalas en el backend seguro de tu aplicación.' : 'La solicitud se guardará en Supabase y recibirá un client_id real.'}</p>{newAppCredential ? <div className="created-credentials"><label className="field-label" htmlFor="created-client-id">Client ID</label><div className="credential-value"><code id="created-client-id">{newAppCredential.clientId}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientId)}>Copiar</button></div><label className="field-label" htmlFor="created-client-secret">Client secret · una sola vez</label><div className="credential-value"><code id="created-client-secret">{newAppCredential.clientSecret}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientSecret)}>Copiar</button></div><div className="modal-info"><ShieldAlert size={15} /><span>No lo incluyas en JavaScript del navegador, repositorios ni URLs. Guárdalo como secreto del servidor. El acceso seguirá pendiente hasta que Administración lo autorice.</span></div><div className="modal-actions"><button className="button-primary" type="button" onClick={() => { setNewAppOpen(false); setNewAppCredential(null); setNewAppName(''); setNewAppDescription(''); setNewAppRedirectUri('') }}>He guardado las credenciales</button></div></div> : <><label className="field-label" htmlFor="new-app-name">Nombre de la aplicación</label><input className="modal-input" id="new-app-name" autoFocus maxLength={100} value={newAppName} onChange={(event) => setNewAppName(event.target.value)} placeholder="Ej. Portal de servicios" required /><label className="field-label" htmlFor="new-app-category">Categoría</label><input className="modal-input" id="new-app-category" maxLength={80} value={newAppCategory} onChange={(event) => setNewAppCategory(event.target.value)} placeholder="Ecosistema" /><label className="field-label" htmlFor="new-app-description">Descripción</label><input className="modal-input" id="new-app-description" maxLength={500} value={newAppDescription} onChange={(event) => setNewAppDescription(event.target.value)} placeholder="Qué ofrece esta aplicación" /><label className="field-label" htmlFor="new-app-redirect">Redirect URI</label><input className="modal-input" id="new-app-redirect" type="url" value={newAppRedirectUri} onChange={(event) => setNewAppRedirectUri(event.target.value)} placeholder="https://app.ejemplo.org/placetaid/callback" required /><small className="field-help">Debe coincidir exactamente con el callback de tu aplicación. HTTPS obligatorio, salvo localhost en desarrollo.</small>{newAppError && <p className="gateway-error" role="alert">{newAppError}</p>}<div className="modal-info"><ShieldAlert size={15} /><span>Se crea un servicio general y la integración queda pendiente; solo podrá iniciar login después de autorizarla en el catálogo.</span></div><div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setNewAppOpen(false)} disabled={creatingApp}>Cancelar</button><button className="button-primary" type="submit" disabled={creatingApp || !adminToken}><Plus size={15} />{creatingApp ? 'Creando en Supabase…' : 'Crear aplicación'}</button></div></>}</form></div>}
       {consentPrompt && <div className="modal-backdrop consent-modal-backdrop" role="presentation"><section className="consent-modal" role="dialog" aria-modal="true" aria-labelledby="consent-modal-title"><div className="consent-modal-top"><span className="consent-modal-icon"><LockKeyhole size={18} /></span><button className="icon-button" aria-label="Cerrar solicitud" onClick={() => setConsentPrompt(null)}><X size={16} /></button></div><div className="eyebrow"><span className="eyebrow-line" />SOLICITUD DE DATO PROTEGIDO</div><h2 id="consent-modal-title">{integrations.find((app) => app.id === consentPrompt.appId)?.name ?? 'Esta aplicación'} quiere acceder a {protectedFieldLabel(consentPrompt.field).toLowerCase()}.</h2><p>Esta aplicación solicita permiso para utilizar este dato asociado a tu PlacetaID. La autorización solo se aplica a esta aplicación y puedes revocarla después.</p><div className="consent-modal-data"><span>{protectedFieldLabel(consentPrompt.field)}</span><span>Tu permiso, siempre revocable</span></div><div className="modal-actions"><button className="button-quiet" onClick={() => resolveConsentPrompt('denied')}>No permitir</button><button className="button-primary" onClick={() => resolveConsentPrompt('granted')}><Check size={14} />Permitir</button></div></section></div>}
       {legalDocument && <div className="modal-backdrop legal-document-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLegalDocument(null) }}><section className="legal-document-modal" role="dialog" aria-modal="true" aria-labelledby="legal-document-title"><div className="consent-modal-top"><span className="consent-modal-icon">{legalDocument === 'terms' ? <ShieldCheck size={18} /> : <LockKeyhole size={18} />}</span><button className="icon-button" aria-label="Cerrar documento" onClick={() => setLegalDocument(null)}><X size={16} /></button></div><span className="eyebrow">PLACETAID v27 · {LEGAL_VERSION}</span><h2 id="legal-document-title">{legalDocument === 'terms' ? 'Términos y condiciones' : 'Política de privacidad'}</h2>{legalDocument === 'terms' ? <div className="legal-document-copy"><h3>Uso del servicio</h3><p>PlacetaID identifica al titular y aplica las restricciones definidas por Administración para cada aplicación y servicio. El inicio de sesión no garantiza que todos los servicios estén disponibles.</p><h3>Datos básicos y protegidos</h3><p>En un acceso permitido se comparten los indicadores de edad, nombre, apellidos y DIP. Correo, teléfono, fotografía y otros datos protegidos solo se entregan con autorización administrativa y consentimiento específico del titular.</p><h3>Seguridad y disponibilidad</h3><p>El titular debe proteger sus métodos vinculados. Administración puede suspender cuentas, servicios o integraciones por seguridad o incumplimiento; las acciones administrativas sensibles quedan auditadas.</p></div> : <div className="legal-document-copy"><h3>Responsable y finalidad</h3><p>Responsable: Grupo de La Placeta. PlacetaID utiliza datos de identidad para localizar la cuenta, autenticar al titular, determinar elegibilidad por edad y controlar el acceso a aplicaciones autorizadas.</p><h3>Datos y minimización</h3><p>Los datos básicos se limitan a login correcto, indicadores de edad, nombre, apellidos y DIP. Los datos protegidos se solicitan de uno en uno; nunca se comparte una copia del documento de identidad durante el inicio de sesión.</p><h3>Consentimiento y derechos</h3><p>Puedes consultar y revocar permisos por aplicación y dato desde «Mis permisos». Para ejercer derechos de acceso, rectificación, supresión u oposición, contacta con Administración de La Placeta. El plazo de conservación y el contacto del responsable deben completarse antes del despliegue.</p></div>}<div className="legal-draft-note">Versión inicial para revisión jurídica antes de uso real.</div><button className="button-primary legal-document-close" onClick={() => setLegalDocument(null)}>Cerrar documento</button></section></div>}
       {isPublicView && <button className="floating-plan-button" aria-haspopup="dialog" onClick={() => setPlanInfoOpen(true)}><span className="floating-plan-number">25</span><span><small>PLAN 2027</small><strong>Transformación digital</strong></span><ArrowRight size={15} /></button>}

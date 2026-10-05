@@ -14,7 +14,7 @@ create table if not exists public.plid_v27_integrations (
   status text not null default 'pending' check (status in ('pending', 'authorized', 'disabled')),
   min_age smallint not null default 0 check (min_age in (0, 16, 18)),
   allowed_roles text[] not null default '{miembro}',
-  scopes jsonb not null default '{"email":false,"phone":false,"photo":false,"identityVerified":false}'::jsonb,
+  scopes jsonb not null default '{"dip":false,"email":false,"phone":false,"photo":false,"identityVerified":false}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -114,7 +114,7 @@ create table if not exists public.plid_v27_consents (
   id uuid primary key default gen_random_uuid(),
   user_id bigint not null references public.solicitantes(id) on delete cascade,
   app_id uuid not null references public.plid_v27_integrations(id) on delete cascade,
-  field text not null check (field in ('email', 'phone', 'photo', 'identityVerified')),
+  field text not null check (field in ('dip', 'email', 'phone', 'photo', 'identityVerified')),
   status text not null check (status in ('pending', 'granted', 'denied', 'revoked')),
   granted_at timestamptz,
   revoked_at timestamptz,

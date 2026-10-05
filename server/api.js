@@ -1,29 +1,49 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import { supabase, supabaseReady } from './supabase.js'
-import { createRandomToken, hashDip, hashToken, isValidDip, secureEquals, signSession, verifySession } from './security.js'
+import { createRandomToken, hashToken, isValidDip, normalizeDip, secureEquals, signSession, verifySession } from './security.js'
+import { legacyApi } from './legacy/api.js'
 
 export const api = Router()
 
 const migrationTables = [
-  'plid_v27_integrations',
-  'plid_v27_services',
-  'plid_v27_devices',
-  'plid_v27_authenticators',
-  'plid_v27_user_security',
-  'plid_v27_user_access',
-  'plid_v27_auth_requests',
-  'plid_v27_sessions',
-  'plid_v27_consents',
-  'plid_v27_oauth_codes',
-  'plid_v27_legal_acceptances',
-  'plid_v27_audit',
+  ['plid_v27_integrations', 'status'],
+  ['plid_v27_services', 'enabled'],
+  ['plid_v27_devices', 'active'],
+  ['plid_v27_authenticators', 'enabled'],
+  ['plid_v27_user_security', 'status'],
+  ['plid_v27_user_access', 'decision'],
+  ['plid_v27_auth_requests', 'status'],
+  ['plid_v27_sessions', 'expires_at'],
+  ['plid_v27_consents', 'status'],
+  ['plid_v27_oauth_codes', 'expires_at'],
+  ['plid_v27_legal_acceptances', 'document_type'],
+  ['plid_v27_audit', 'event_type'],
+  ['plid_v27_legacy_credentials', 'password_hash'],
+  ['plid_v27_legacy_auth_requests', 'request_code'],
+  ['rsp_votaciones', 'opciones'],
+  ['rsp_registro_votos', 'votacion_id'],
+  ['rsp_documentos', 'contenido'],
+  ['rsp_notificaciones', 'destinatario_dip'],
 ]
 
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false })
+const deviceEnrollmentLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false })
+const deviceLifetimeMs = 365 * 24 * 60 * 60 * 1000
 
 function fail(res, status, code, message) {
   return res.status(status).json({ error: code, message })
+}
+
+function isAllowedRedirectUri(value) {
+  try {
+    const uri = new URL(String(value))
+    if (uri.username || uri.password || uri.hash) return false
+    if (uri.protocol === 'https:') return true
+    return uri.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(uri.hostname)
+  } catch {
+    return false
+  }
 }
 
 function setSessionCookie(res, token) {
@@ -117,6 +137,32 @@ async function requireAdmin(req, res, next) {
   next()
 }
 
+function requireDeviceEnrollmentKey(req, res, next) {
+  const expected = String(process.env.PLACETAID_V27_DEVICE_KEY || '')
+  if (expected.length < 32) return fail(res, 503, 'DEVICE_LINKING_NOT_CONFIGURED', 'La sincronización segura de dispositivos v27 no está configurada.')
+  const supplied = String(req.headers['x-placetaid-device-key'] || '')
+  if (!secureEquals(expected, supplied)) return fail(res, 401, 'INVALID_DEVICE_LINKING_KEY', 'No se autorizó la vinculación del dispositivo.')
+  next()
+}
+
+async function requireUserSession(req, res, next) {
+  const cookie = String(req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('plid_v27='))
+  const token = cookie?.slice('plid_v27='.length)
+  if (!token) return fail(res, 401, 'USER_SESSION_REQUIRED', 'Inicia sesión en PlacetaID para continuar.')
+  try {
+    const { data: session, error } = await supabase.from('plid_v27_sessions')
+      .select('user_id,expires_at,revoked_at')
+      .eq('token_hash', hashToken(decodeURIComponent(token)))
+      .maybeSingle()
+    if (error) throw error
+    if (!session || session.revoked_at || Date.parse(session.expires_at) <= Date.now()) {
+      return fail(res, 401, 'USER_SESSION_EXPIRED', 'La sesión de PlacetaID ha caducado.')
+    }
+    req.userId = session.user_id
+    next()
+  } catch (error) { handleDbError(res, error) }
+}
+
 async function getUserById(id) {
   const { data, error } = await supabase.from('solicitantes')
     .select('id,alias,nombre_real,email,fecha_nacimiento,edad,dip,placeid,rol,estado,lista_negra,ultimo_acceso')
@@ -138,12 +184,18 @@ async function getAppAndServices(appId) {
 
 api.get('/health', async (_req, res) => {
   if (!supabaseReady) return res.status(503).json({ ok: false, code: 'SUPABASE_NOT_CONFIGURED' })
-  const checks = await Promise.all(migrationTables.map(async (table) => {
-    const { error } = await supabase.from(table).select('id', { head: true }).limit(0)
+  const checks = await Promise.all(migrationTables.map(async ([table, column]) => {
+    const { error } = await supabase.from(table).select(column).limit(1)
     return { table, ready: !error, code: error?.code }
   }))
   const missing = checks.filter((check) => !check.ready)
-  res.status(missing.length ? 503 : 200).json({ ok: missing.length === 0, database: 'supabase', migrationRequired: missing.length > 0, missingTables: missing.map((item) => item.table) })
+  res.status(missing.length ? 503 : 200).json({
+    ok: missing.length === 0,
+    database: 'supabase',
+    migrationRequired: missing.length > 0,
+    missingTables: missing.map((item) => item.table),
+    deviceBridgeConfigured: String(process.env.PLACETAID_V27_DEVICE_KEY || '').length >= 32,
+  })
 })
 
 api.post('/admin/session', authLimiter, (req, res) => {
@@ -169,6 +221,12 @@ api.get('/admin/apps', requireAdmin, async (_req, res) => {
 api.post('/admin/apps', requireAdmin, async (req, res) => {
   const name = String(req.body?.name || '').trim().slice(0, 100)
   if (!name) return fail(res, 400, 'APP_NAME_REQUIRED', 'Indica el nombre de la aplicación.')
+  const redirectUris = Array.isArray(req.body?.redirectUris)
+    ? [...new Set(req.body.redirectUris.map((value) => String(value).trim()))]
+    : []
+  if (!redirectUris.length || redirectUris.some((uri) => !isAllowedRedirectUri(uri))) {
+    return fail(res, 400, 'INVALID_REDIRECT_URI', 'Registra al menos una URL HTTPS válida; HTTP solo se permite en localhost.')
+  }
   try {
     const clientId = `plid27_${createRandomToken(12)}`
     const clientSecret = createRandomToken(32)
@@ -180,12 +238,27 @@ api.post('/admin/apps', requireAdmin, async (req, res) => {
       category: String(req.body?.category || 'Ecosistema').slice(0, 80),
       initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
       color: 'violet',
-      redirect_uris: Array.isArray(req.body?.redirectUris) ? req.body.redirectUris.filter((value) => /^https:\/\//i.test(value)) : [],
+      redirect_uris: redirectUris,
+      allowed_roles: ['administrador', 'miembro'],
       status: 'pending',
     }
     const { data, error } = await supabase.from('plid_v27_integrations').insert(appRow).select('*').single()
     if (error) throw error
-    res.status(201).json({ app: mapIntegration(data), clientSecret })
+    const { data: service, error: serviceError } = await supabase.from('plid_v27_services').insert({
+      app_id: data.id,
+      service_key: 'general',
+      name: 'Acceso general',
+      description: 'Inicio de sesión en la aplicación',
+      enabled: true,
+      min_age: 0,
+      allowed_roles: ['administrador', 'miembro'],
+    }).select('*').single()
+    if (serviceError) {
+      const { error: rollbackError } = await supabase.from('plid_v27_integrations').delete().eq('id', data.id)
+      if (rollbackError) console.error('[PlacetaID API] No se pudo revertir la integración incompleta:', rollbackError.code || rollbackError.message)
+      throw serviceError
+    }
+    res.status(201).json({ app: mapIntegration(data, [service]), clientSecret })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -283,6 +356,129 @@ api.patch('/admin/users/:id', requireAdmin, async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+api.patch('/admin/users/:id/access/:appId', requireAdmin, async (req, res) => {
+  const decision = String(req.body?.decision || '')
+  if (!['allow', 'deny'].includes(decision)) return fail(res, 400, 'INVALID_ACCESS_DECISION', 'La decisión de acceso no es válida.')
+  try {
+    const { error } = await supabase.from('plid_v27_user_access').upsert({
+      user_id: Number(req.params.id),
+      app_id: req.params.appId,
+      decision,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,app_id' })
+    if (error) throw error
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      target_user_id: Number(req.params.id),
+      app_id: req.params.appId,
+      event_type: 'user_app_access_updated',
+      details: { decision },
+    })
+    if (auditError) throw auditError
+    res.json({ ok: true, decision })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/admin/users/:id/revoke-sessions', requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id)
+  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, 'INVALID_USER_ID', 'La identidad indicada no es válida.')
+  try {
+    const now = new Date().toISOString()
+    const [{ error: devicesError }, { error: sessionsError }] = await Promise.all([
+      supabase.from('plid_v27_devices').update({ active: false, revoked_at: now }).eq('user_id', userId).eq('active', true).is('revoked_at', null),
+      supabase.from('plid_v27_sessions').update({ revoked_at: now }).eq('user_id', userId).is('revoked_at', null),
+    ])
+    if (devicesError) throw devicesError
+    if (sessionsError) throw sessionsError
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      target_user_id: userId,
+      event_type: 'user_sessions_revoked',
+      details: {},
+    })
+    if (auditError) throw auditError
+    res.json({ ok: true })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/internal/devices/register', deviceEnrollmentLimiter, requireDeviceEnrollmentKey, async (req, res) => {
+  const dip = normalizeDip(req.body?.dip)
+  const deviceId = String(req.body?.deviceId || '').trim()
+  const deviceName = String(req.body?.deviceName || 'Dispositivo').trim().slice(0, 100)
+  const method = String(req.body?.method || '')
+  if (!isValidDip(dip) || !deviceId || deviceId.length > 256 || /[\u0000-\u001f]/.test(deviceId) || !['mobile', 'desktop'].includes(method)) {
+    return fail(res, 400, 'INVALID_DEVICE_REGISTRATION', 'Los datos del dispositivo no son válidos.')
+  }
+  try {
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,estado,lista_negra')
+      .eq('dip', dip)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user || userStatus(user, null) !== 'active') return fail(res, 403, 'IDENTITY_NOT_AVAILABLE', 'No se puede vincular un dispositivo a esta identidad.')
+    const { data: controls, error: controlsError } = await supabase.from('plid_v27_user_security')
+      .select('status')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (controlsError) throw controlsError
+    if (controls?.status && controls.status !== 'active') return fail(res, 403, 'IDENTITY_NOT_AVAILABLE', 'La identidad no está habilitada para vincular dispositivos.')
+
+    const now = new Date()
+    const { data: device, error } = await supabase.from('plid_v27_devices').upsert({
+      user_id: user.id,
+      device_id: deviceId,
+      device_name: deviceName || 'Dispositivo',
+      method,
+      session_token_hash: hashToken(deviceId),
+      active: true,
+      expires_at: new Date(now.getTime() + deviceLifetimeMs).toISOString(),
+      last_seen_at: now.toISOString(),
+      revoked_at: null,
+    }, { onConflict: 'user_id,device_id' }).select('id,method,expires_at').single()
+    if (error) throw error
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      actor_user_id: user.id,
+      target_user_id: user.id,
+      event_type: 'device_linked',
+      details: { method },
+    })
+    if (auditError) throw auditError
+    res.json({ ok: true, deviceId: device.id, method: device.method, expiresAt: device.expires_at })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/internal/devices/revoke', deviceEnrollmentLimiter, requireDeviceEnrollmentKey, async (req, res) => {
+  const dip = normalizeDip(req.body?.dip)
+  const deviceId = String(req.body?.deviceId || '').trim()
+  if (!isValidDip(dip) || !deviceId || deviceId.length > 256) return fail(res, 400, 'INVALID_DEVICE_REGISTRATION', 'Los datos del dispositivo no son válidos.')
+  try {
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id')
+      .eq('dip', dip)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user) return res.json({ ok: true, revoked: false })
+    const now = new Date().toISOString()
+    const { data: device, error } = await supabase.from('plid_v27_devices')
+      .update({ active: false, revoked_at: now })
+      .eq('user_id', user.id)
+      .eq('device_id', deviceId)
+      .eq('active', true)
+      .is('revoked_at', null)
+      .select('id,method')
+      .maybeSingle()
+    if (error) throw error
+    if (device) {
+      const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+        actor_user_id: user.id,
+        target_user_id: user.id,
+        event_type: 'device_revoked',
+        details: { method: device.method },
+      })
+      if (auditError) throw auditError
+    }
+    res.json({ ok: true, revoked: Boolean(device) })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.post('/public/identify', authLimiter, async (req, res) => {
   const dip = normalizeDip(req.body?.dip)
   if (!isValidDip(dip)) return fail(res, 400, 'INVALID_DIP', 'Revisa el DIP: debe contener 8 números y una letra.')
@@ -301,7 +497,7 @@ api.post('/public/identify', authLimiter, async (req, res) => {
       const { data, error: appError } = await supabase.from('plid_v27_integrations').select('*').eq('client_id', req.body.clientId).eq('status', 'authorized').maybeSingle()
       if (appError) throw appError
       app = data
-      if (!app || !Array.isArray(app.redirect_uris) || !app.redirect_uris.includes(req.body.redirectUri)) return fail(res, 403, 'APP_NOT_AUTHORIZED', 'La aplicación solicitante no está autorizada para PlacetaID.')
+      if (!app || !isAllowedRedirectUri(req.body.redirectUri) || !Array.isArray(app.redirect_uris) || !app.redirect_uris.includes(req.body.redirectUri)) return fail(res, 403, 'APP_NOT_AUTHORIZED', 'La aplicación solicitante o su redirect_uri no están autorizados para PlacetaID.')
       const serviceQuery = supabase.from('plid_v27_services').select('*').eq('app_id', app.id).eq('enabled', true)
       const { data: serviceData, error: serviceError } = req.body.serviceKey
         ? await serviceQuery.eq('service_key', req.body.serviceKey).maybeSingle()
@@ -383,7 +579,7 @@ async function completeAuthorizedRequest(request, res) {
     if (override?.decision === 'deny' || !app.allowed_roles.includes(user.rol) || (Array.isArray(roles) && !roles.includes(user.rol)) || (age !== null && age < requiredAge)) return { stage: 'denied', reason: 'ACCESS_POLICY', login_correct: false }
     if (status === 'restricted') return { stage: 'denied', reason: 'ACCOUNT_RESTRICTED', login_correct: false }
 
-    const protectedFields = ['email', 'phone', 'photo', 'identityVerified'].filter((field) => app.scopes?.[field])
+    const protectedFields = ['dip', 'email', 'phone', 'photo', 'identityVerified'].filter((field) => app.scopes?.[field])
     if (protectedFields.length) {
       const { data: consents, error: consentError } = await supabase.from('plid_v27_consents').select('field,status').eq('user_id', user.id).eq('app_id', app.id)
       if (consentError) throw consentError
@@ -409,7 +605,7 @@ async function completeAuthorizedRequest(request, res) {
     over_18: age !== null && age >= 18,
     name: String(user.alias || user.nombre_real || '').trim().split(/\s+/)[0] || '',
     surname: user.alias ? String(user.nombre_real || '') : String(user.nombre_real || '').trim().split(/\s+/).slice(1).join(' '),
-    dip: user.dip,
+    ...(app?.scopes?.dip && granted.has('dip') ? { dip: user.dip } : {}),
     ...(app?.scopes?.email && granted.has('email') ? { email: user.email } : {}),
     ...(app?.scopes?.identityVerified && controls?.identity_verified && granted.has('identityVerified') ? { identity_verified: true } : {}),
   }
@@ -430,6 +626,38 @@ async function completeAuthorizedRequest(request, res) {
   return { stage: 'complete', login_correct: true, claims: { ...claims, email: undefined } }
 }
 
+api.post('/public/exchange', authLimiter, async (req, res) => {
+  const clientId = String(req.body?.client_id || '')
+  const clientSecret = String(req.body?.client_secret || '')
+  const code = String(req.body?.code || '')
+  const redirectUri = String(req.body?.redirect_uri || '')
+  if (!clientId || !clientSecret || !code || !redirectUri) return fail(res, 400, 'INVALID_EXCHANGE', 'Se requieren client_id, client_secret, code y redirect_uri.')
+  try {
+    const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
+      .select('id,client_secret_hash,status')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    if (appError) throw appError
+    if (!app || app.status !== 'authorized' || !app.client_secret_hash || !secureEquals(hashToken(clientSecret), app.client_secret_hash)) {
+      return fail(res, 401, 'INVALID_CLIENT', 'La aplicación no está autorizada o sus credenciales no son válidas.')
+    }
+    if (!isAllowedRedirectUri(redirectUri)) return fail(res, 400, 'INVALID_REDIRECT_URI', 'El redirect_uri no es válido.')
+    const now = new Date().toISOString()
+    const { data: grant, error } = await supabase.from('plid_v27_oauth_codes')
+      .update({ consumed_at: now })
+      .eq('code_hash', hashToken(code))
+      .eq('app_id', app.id)
+      .eq('redirect_uri', redirectUri)
+      .is('consumed_at', null)
+      .gt('expires_at', now)
+      .select('claims')
+      .maybeSingle()
+    if (error) throw error
+    if (!grant) return fail(res, 400, 'INVALID_OR_EXPIRED_CODE', 'El código ya se utilizó, ha caducado o no coincide con la solicitud.')
+    res.json({ login_correct: true, claims: grant.claims })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.get('/public/auth-requests/:id', async (req, res) => {
   try {
     const { data: request, error } = await supabase.from('plid_v27_auth_requests').select('*').eq('id', req.params.id).maybeSingle()
@@ -437,6 +665,119 @@ api.get('/public/auth-requests/:id', async (req, res) => {
     if (!request || Date.parse(request.expires_at) <= Date.now()) return fail(res, 410, 'REQUEST_EXPIRED', 'La solicitud de acceso ha caducado.')
     if (request.status !== 'authorized') return res.json({ stage: request.status === 'denied' ? 'denied' : 'waiting', method: request.method })
     res.json(await completeAuthorizedRequest(request, res))
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.get('/public/session', requireUserSession, async (req, res) => {
+  try {
+    const [
+      { data: user, error: userError },
+      { data: consents, error: consentError },
+      { data: devices, error: deviceError },
+      { data: apps, error: appsError },
+      { data: services, error: servicesError },
+    ] = await Promise.all([
+      supabase.from('solicitantes').select('id,alias,nombre_real,email,fecha_nacimiento,edad,dip,placeid,rol,estado,lista_negra,ultimo_acceso').eq('id', req.userId).maybeSingle(),
+      supabase.from('plid_v27_consents').select('app_id,field,status,updated_at').eq('user_id', req.userId),
+      supabase.from('plid_v27_devices').select('method,active,expires_at,revoked_at').eq('user_id', req.userId),
+      supabase.from('plid_v27_integrations').select('id,name,description,category,initials,color,status,min_age,allowed_roles,redirect_uris,scopes,updated_at'),
+      supabase.from('plid_v27_services').select('*').order('created_at'),
+    ])
+    if (userError) throw userError
+    if (consentError) throw consentError
+    if (deviceError) throw deviceError
+    if (appsError) throw appsError
+    if (servicesError) throw servicesError
+    if (!user) return fail(res, 404, 'IDENTITY_NOT_FOUND', 'No se encontró la identidad de esta sesión.')
+    const security = await supabase.from('plid_v27_user_security').select('status,identity_verified').eq('user_id', req.userId).maybeSingle()
+    if (security.error) throw security.error
+    const activeDevices = (devices || []).filter((device) => device.active && !device.revoked_at && Date.parse(device.expires_at) > Date.now())
+    res.json({
+      user: {
+        id: String(user.id),
+        dip: user.dip,
+        placeid: user.placeid,
+        name: user.alias || String(user.nombre_real || '').split(/\s+/)[0],
+        surname: user.alias ? user.nombre_real || '' : String(user.nombre_real || '').split(/\s+/).slice(1).join(' '),
+        birthDate: user.fecha_nacimiento,
+        email: user.email,
+        role: user.rol,
+        status: userStatus(user, security.data),
+        identityVerified: Boolean(security.data?.identity_verified),
+        auth: {
+          mobile: activeDevices.some((device) => device.method === 'mobile'),
+          authenticator: activeDevices.some((device) => device.method === 'authenticator'),
+          desktop: activeDevices.some((device) => device.method === 'desktop'),
+        },
+        appOverrides: {},
+        permissions: (consents || []).map((consent) => ({ appId: consent.app_id, field: consent.field, status: consent.status, updated: consent.updated_at })),
+        legalAcceptedVersions: [],
+        lastAccess: user.ultimo_acceso || '',
+      },
+      integrations: (apps || []).map((app) => mapIntegration(app, (services || []).filter((service) => service.app_id === app.id))),
+    })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/public/logout', requireUserSession, async (req, res) => {
+  const cookie = String(req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('plid_v27='))
+  const token = cookie?.slice('plid_v27='.length)
+  if (!token) return fail(res, 401, 'USER_SESSION_REQUIRED', 'La sesión de PlacetaID no está activa.')
+  try {
+    const { error } = await supabase.from('plid_v27_sessions')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('token_hash', hashToken(decodeURIComponent(token)))
+      .eq('user_id', req.userId)
+      .is('revoked_at', null)
+    if (error) throw error
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      actor_user_id: req.userId,
+      target_user_id: req.userId,
+      event_type: 'identity_logged_out',
+      details: {},
+    })
+    if (auditError) throw auditError
+    res.setHeader('Set-Cookie', 'plid_v27=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + (process.env.NODE_ENV === 'production' ? '; Secure' : ''))
+    res.json({ ok: true })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.patch('/public/session/consents', requireUserSession, async (req, res) => {
+  const appId = String(req.body?.appId || '')
+  const field = String(req.body?.field || '')
+  const decision = String(req.body?.decision || '')
+  if (!appId || !['dip', 'email', 'phone', 'photo', 'identityVerified'].includes(field) || !['granted', 'denied', 'revoked'].includes(decision)) {
+    return fail(res, 400, 'INVALID_CONSENT', 'La decisión de consentimiento no es válida.')
+  }
+  try {
+    const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
+      .select('id,name,status,scopes')
+      .eq('id', appId)
+      .maybeSingle()
+    if (appError) throw appError
+    if (!app || app.status !== 'authorized' || !app.scopes?.[field]) {
+      return fail(res, 403, 'SCOPE_NOT_ALLOWED', 'La aplicación no está autorizada para este dato.')
+    }
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('plid_v27_consents').upsert({
+      user_id: req.userId,
+      app_id: app.id,
+      field,
+      status: decision,
+      granted_at: decision === 'granted' ? now : null,
+      revoked_at: decision === 'revoked' ? now : null,
+      updated_at: now,
+    }, { onConflict: 'user_id,app_id,field' })
+    if (error) throw error
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      actor_user_id: req.userId,
+      target_user_id: req.userId,
+      app_id: app.id,
+      event_type: decision === 'granted' ? 'consent_granted' : decision === 'denied' ? 'consent_denied' : 'consent_revoked',
+      details: { field },
+    })
+    if (auditError) throw auditError
+    res.json({ ok: true, appId, field, status: decision, updated: now })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -458,7 +799,10 @@ api.post('/public/auth-requests/:id/approve', authLimiter, async (req, res) => {
     const { data: updated, error: updateError } = await supabase.from('plid_v27_auth_requests').update({ status: 'authorized', completed_at: new Date().toISOString() }).eq('id', request.id).eq('status', 'pending').select('id,status,completed_at').maybeSingle()
     if (updateError) throw updateError
     if (!updated) return fail(res, 409, 'REQUEST_ALREADY_COMPLETED', 'La solicitud ya ha sido resuelta.')
-    await supabase.from('plid_v27_devices').update({ last_seen_at: new Date().toISOString() }).eq('id', device.id)
+    await supabase.from('plid_v27_devices').update({
+      last_seen_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + deviceLifetimeMs).toISOString(),
+    }).eq('id', device.id)
     await supabase.from('plid_v27_audit').insert({ actor_user_id: request.user_id, target_user_id: request.user_id, event_type: 'device_authentication_approved', details: { method: request.method, request_id: request.id } })
     res.json({ ok: true, status: 'authorized' })
   } catch (error) { handleDbError(res, error) }
@@ -500,7 +844,7 @@ api.post('/public/consents', async (req, res) => {
   const requestId = String(req.body?.requestId || '')
   const field = String(req.body?.field || '')
   const decision = req.body?.decision === 'granted' ? 'granted' : req.body?.decision === 'denied' ? 'denied' : ''
-  if (!requestId || !['email', 'phone', 'photo', 'identityVerified'].includes(field) || !decision) return fail(res, 400, 'INVALID_CONSENT', 'La decisión de consentimiento no es válida.')
+  if (!requestId || !['dip', 'email', 'phone', 'photo', 'identityVerified'].includes(field) || !decision) return fail(res, 400, 'INVALID_CONSENT', 'La decisión de consentimiento no es válida.')
   try {
     const { data: request, error } = await supabase.from('plid_v27_auth_requests').select('*').eq('id', requestId).maybeSingle()
     if (error) throw error
@@ -515,5 +859,7 @@ api.post('/public/consents', async (req, res) => {
     res.json(await completeAuthorizedRequest(request, res))
   } catch (error) { handleDbError(res, error) }
 })
+
+api.use(legacyApi)
 
 export { calculateAge, mapIntegration, mapService, requireAdmin }

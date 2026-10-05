@@ -1,31 +1,74 @@
-# PlacetaID v27.0 · Plan 2027
+# PlacetaID v27 · Plan 2027
 
-Consola de gobierno de identidad y maqueta de la nueva pasarela PlacetaID. El proyecto contribuye al **ámbito 25, Fomento de la transformación digital**, con una transición iniciada en 2026.
+PlacetaID v27 sirve el catálogo de aplicaciones, la administración de identidades y el flujo real de autenticación desde Supabase. El simulador de políticas sigue usando identidades sintéticas y no debe utilizarse para validar accesos reales.
 
-## Desarrollo
+## Configuración
+
+1. Copia `.env.example` a `.env` o configura las mismas variables en tu proveedor:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_KEY` (solo servidor; nunca uses la `anon key` aquí)
+   - `PLACETAID_V27_ADMIN_KEY` (clave fuerte para la consola)
+   - `PLID27_SESSION_SECRET` (mínimo 32 caracteres aleatorios)
+   - `PLID27_ENCRYPTION_KEY` (mínimo 32 caracteres aleatorios)
+   - `PLACETAID_V27_DEVICE_KEY` (clave aleatoria de al menos 32 caracteres, compartida solo con el servidor de registro heredado)
+2. Aplica, en orden, `supabase/migrations/20261004_placetaid_v27.sql`, `supabase/migrations/20261005_placetaid_v27_explicit_dip_consent.sql`, `supabase/migrations/20261006_placetaid_v27_repair_missing_tables.sql` y `supabase/migrations/20261007_placetaid_legacy_rsp.sql` en el proyecto Supabase conectado. La primera migración usa la tabla existente `public.solicitantes`; la segunda habilita el consentimiento explícito para compartir el DIP. La última prepara las credenciales legacy y la persistencia compartida de votos, documentos y notificaciones de RSP.
+3. Comprueba la conexión en `GET /api/health`. El API responde `ok: true` solo cuando Supabase y todas las tablas v27 están disponibles.
+
+En local, si `SUPABASE_URL` o `SUPABASE_SERVICE_KEY` están vacías, el servidor carga los valores de `PLID27_ENV_FILE` (por defecto `../rsp-web/server/.env`). Las variables ya configuradas con un valor tienen prioridad sobre el archivo.
+
+## Ejecutar
 
 ```bash
 npm install
 npm run dev
 ```
 
-Comprobaciones:
+El cliente Vite se sirve junto al API Express. En producción, `api/index.js` monta las mismas rutas bajo `/api`.
 
 ```bash
 npm run typecheck
 npm run build
 ```
 
-## Experiencia incluida
+## Registrar una aplicación y obtener sus credenciales
 
-- Inicio público por DIP y detección simulada, en prioridad, de PlacetaID móvil, Autentificador y PlacetaID Desktop.
-- Catálogo administrativo con autorización de aplicaciones, restricciones de edad, roles y servicios.
-- Datos básicos siempre presentes tras un acceso permitido. Los datos protegidos pueden marcarse como Nunca o Si acepta; cada decisión pertenece al titular y puede revocarse.
-- Directorio y ficha de identidad con accesos, servicios, métodos vinculados, sesiones y auditoría local.
-- Las vistas de Administración se abren desde el botón **Administración** de la página inicial.
+1. Abre **Administración → Aplicaciones → Nueva integración** e inicia sesión con `PLACETAID_V27_ADMIN_KEY`.
+2. Registra el nombre y la URL de callback exacta. Se requiere HTTPS; HTTP solo se admite para `localhost` en desarrollo.
+3. PlacetaID crea la aplicación y su servicio `general` en Supabase, y entrega un `client_id` y un `client_secret` una sola vez. Guarda el secreto en el servidor de la aplicación; no lo incluyas en el navegador, repositorios ni URLs.
+4. La aplicación aparece como pendiente. Autorízala desde su ficha de administración antes de aceptar inicios de sesión.
 
-## Límites de esta maqueta
+La aplicación inicia la pasarela con una URL de este tipo:
 
-La información es sintética y los cambios se guardan en el navegador. La maqueta no autentica cuentas reales ni está conectada a MongoDB o a PLID26.
+```text
+https://placetaid.example/?client_id=plid27_...&redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback&service=general&state=<valor-aleatorio>
+```
 
-El contrato actual de PLID26 no implementa todavía la selección silenciosa de métodos de v27: su flujo web usa DIP y contraseña, más TOTP cuando está configurado; la autenticación móvil se completa mediante una solicitud temporal y polling; PlacetaID Desktop recibe solicitudes por `placetaid-desktop://auth`. La integración real requiere ampliar el backend y validar la autorización OAuth, las políticas y los consentimientos en servidor; la interfaz local no es una barrera de seguridad.
+PlacetaID comprueba el `client_id`, el estado autorizado, el servicio activo y la coincidencia exacta del callback antes de autenticar. Al completarse el acceso, el callback recibe un código temporal de un solo uso y el `state` original. El backend de la aplicación lo canjea en el API de PlacetaID mediante `POST /api/public/exchange`, enviando JSON con `client_id`, `client_secret`, `code` y `redirect_uri`. El canje devuelve las claims autorizadas; el secreto solo viaja servidor a servidor.
+
+Los códigos de autorización caducan en 90 segundos y solo pueden canjearse una vez. El DIP solo se devuelve si Administración habilita ese permiso para la aplicación y el titular lo concede expresamente durante el inicio de sesión.
+
+### Nexe
+
+Nexe inicia el flujo con `/api/placetaid-login` y recibe el código en `https://nexe-web-plan2027.vercel.app/auth/callback`. Su backend canjea el código con `PLACETAID_CLIENT_SECRET`; nunca debe canjearlo desde el navegador. Para Nexe, Administración debe habilitar **DIP → Si acepta**. El titular verá una petición expresa antes de que el dato se entregue. Si no lo concede, el acceso de Nexe se rechaza. Nexe solo abre sesión para un perfil ya registrado y activo; la autenticación PlacetaID no marca por sí sola la verificación RSP.
+
+## Métodos de autenticación
+
+La pasarela consulta las identidades y los métodos activos en Supabase. Cada titular debe tener un dispositivo de v27 vigente en `plid_v27_devices` (`mobile`, `desktop` o `authenticator`); para TOTP también debe existir un autenticador habilitado en `plid_v27_authenticators`. PlacetaID no permite iniciar sesión únicamente con el DIP ni sustituye un método de recuperación de cuenta.
+
+La aplicación móvil y PlacetaID Desktop deben aprobar la solicitud temporal en `/api/public/auth-requests/:id/approve` con el `deviceToken` previamente vinculado. El Autentificador envía el código de seis cifras a `/api/public/authenticate`.
+
+El servidor heredado `plid26-main` mantiene la verificación existente de DIP+contraseña. Después de verificarla, sincroniza el alta o la desvinculación del dispositivo con Supabase v27. Configura allí `PLACETAID_V27_API_URL` con el origen de PlacetaID v27 y `PLACETAID_V27_DEVICE_KEY` con el mismo valor de `PLACETAID_V27_DEVICE_KEY` de este servidor. La clave compartida solo se usa servidor a servidor; el API v27 guarda el hash del token, no la contraseña ni el token en claro. Los dispositivos ya vinculados deben volver a registrarse una vez desde móvil/Desktop para aparecer en Supabase.
+
+Si falta esta configuración, el servidor heredado informa que el dispositivo no se sincronizó; PlacetaID v27 no habilita el inicio de sesión hasta que la sincronización haya sido confirmada.
+
+### Compatibilidad PL26 y dominio de Vercel
+
+`https://placetaid-web-plan2027.vercel.app` actualmente no tiene un deployment. El deployment v27 comprobado usa `https://placetaid-web-2027.vercel.app`. Configura Nexe con `PLACETAID_URL=https://placetaid-web-2027.vercel.app` y despliega el handler actualizado para que use OAuth v27. El endpoint `/api/auth/fase1` de compatibilidad reenvía las solicitudes antiguas al flujo v27 cuando esta versión esté desplegada.
+
+Configura RSP con `PLACETAID_API_URL=https://placetaid-web-2027.vercel.app/api`. Aplica las migraciones y confirma que `/api/health` responda `ok: true` antes de probar el login. Para transferir el dominio histórico de PL26, asígnalo como alias al deployment v27 desde Vercel; el código por sí solo no crea deployments ni reasigna dominios.
+
+## Qué es persistente
+
+- Catálogo, client IDs, reglas de acceso, identidades consultadas, sesiones, aceptación legal, consentimientos y auditoría: Supabase.
+- La vista **Simulador de acceso** y su catálogo de ejemplo: local y sintética; no autentican usuarios.
+- La consola de administración utiliza una sesión temporal de servidor. Los secretos de aplicaciones no se guardan en `localStorage`.
