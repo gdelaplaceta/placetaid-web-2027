@@ -152,7 +152,7 @@ async function listPendingAuthRequests(userId, dip) {
       _id: request.id,
       identidad: dip,
       codigo: request.request_code,
-      servicio: serviceNames.get(request.service_id) || appNames.get(request.app_id) || 'Acceso PlacetaID',
+      servicio: [appNames.get(request.app_id), serviceNames.get(request.service_id)].filter(Boolean).join(' · ') || 'Acceso PlacetaID',
       servicioUrl: request.redirect_uri,
       plataforma: request.method,
       creadoEn: request.created_at,
@@ -268,6 +268,7 @@ function notification(row) {
     cuerpo: row.mensaje,
     votacionId: row.objeto_tipo === 'votacion' ? row.objeto_id : null,
     documentoId: row.objeto_tipo === 'documento' ? row.objeto_id : null,
+    authRequestId: row.objeto_tipo === 'auth_request' ? row.objeto_id : null,
     leido: Boolean(row.leida),
     creadoEn: row.fecha || row.created_at,
   }
@@ -470,7 +471,7 @@ legacyApi.post('/mobil/request', deviceLimiter, async (req, res) => {
   try {
     const user = await getUser(dip)
     if (!user || !legacyUser(user).activo) return res.status(404).json({ error: 'Identidad no disponible' })
-    const requestCode = randomBytes(3).toString('hex').toUpperCase().slice(0, 4)
+    const requestCode = randomBytes(4).toString('hex').toUpperCase()
     const { data, error } = await supabase.from('plid_v27_legacy_auth_requests').insert({
       request_code: requestCode,
       user_id: user.id,
@@ -480,6 +481,13 @@ legacyApi.post('/mobil/request', deviceLimiter, async (req, res) => {
       expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     }).select('id').single()
     if (error) throw error
+    await insertNotification({
+      dip,
+      title: `Solicitud de acceso: ${service}`,
+      message: `Confirma en PlacetaID Móvil que el código ${requestCode} coincide con el de la pasarela antes de aprobar.`,
+      type: 'auth_request',
+      objectId: data.id,
+    })
     res.json({ ok: true, codigo: requestCode, requestId: data.id, mensaje: `Código ${requestCode} generado. Revisa tu app PlacetaID Móvil.` })
   } catch (error) { errorResponse(res, error) }
 })

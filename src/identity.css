@@ -210,6 +210,19 @@
 .public-topbar .public-action { color: #32105f; }
 @media (max-width: 600px) { .public-brand { width: 180px; height: 48px; } }
 
+.public-shell .gateway-request-card { width: min(680px, 100%); margin-bottom: 16px; }
+
+@media (max-width: 760px) {
+  .public-shell .gateway-request-grid { grid-template-columns: minmax(0, 1fr); }
+  .public-shell .gateway-request-section,
+  .public-shell .gateway-request-section:nth-child(2n) { border-right: 0; }
+  .public-shell .gateway-request-heading { align-items: flex-start; flex-wrap: wrap; gap: 10px; padding: 16px; }
+  .public-shell .gateway-request-badge { margin-left: 58px; }
+  .public-shell .gateway-request-section { padding: 14px 16px; }
+  .public-shell .gateway-confirmation-code { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .public-shell .gateway-confirmation-code > div { min-width: 0; }
+}
+
 /* Shared visual refresh for the administration and sign-in surfaces. */
 :root {
   --ink: #24133a;
@@ -705,6 +718,73 @@ button { min-height: 38px; }
 .gateway-disclosure li small { margin-left: auto; color: #867393; font-size: 7px; }
 .gateway-disclosure-empty, .gateway-disclosure-note { margin: 0; color: #78668e; font-size: 8px; line-height: 1.6; }
 .gateway-disclosure-note { padding-top: 8px; border-top: 1px solid #e5daef; }
+.gateway-request-card { margin: 0 0 18px; overflow: hidden; border: 1px solid #cfc0e2; border-radius: 16px; background: #fbf9ff; box-shadow: 0 12px 35px #27134112; }
+.gateway-request-heading { display: flex; align-items: center; gap: 14px; padding: 20px 22px; border-bottom: 1px solid #e9e0f0; background: linear-gradient(120deg, #f7f1ff, #fff); }
+.gateway-app-mark { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; border: 1px solid #d8c9eb; border-radius: 13px; background: #e8def7; color: #4c267b; font-size: 15px; font-weight: 900; }
+.gateway-app-copy { min-width: 0; flex: 1; }
+.gateway-app-copy h2 { margin: 4px 0; color: #241537; font-size: 17px; }
+.gateway-app-copy p { margin: 0; color: #746483; font-size: 11px; line-height: 1.5; }
+.gateway-verified-label, .gateway-request-badge { display: inline-flex; align-items: center; gap: 5px; color: #5d4380; font-size: 9px; font-weight: 800; letter-spacing: .45px; }
+.gateway-verified-label svg { color: #568166; }
+.gateway-request-badge { padding: 7px 9px; border: 1px solid #dcd0e9; border-radius: 999px; background: #fff; color: #664c84; letter-spacing: 0; white-space: nowrap; }
+.gateway-request-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gateway-request-section { min-width: 0; padding: 16px 20px; border-right: 1px solid #eee7f3; border-bottom: 1px solid #eee7f3; }
+.gateway-request-section:nth-child(2n) { border-right: 0; }
+.gateway-section-label { display: block; margin-bottom: 9px; color: #8a7898; font: 800 8px 'DM Mono', monospace; letter-spacing: .7px; }
+.gateway-request-section > strong { color: #342047; font-size: 12px; }
+.gateway-request-section > p { margin: 6px 0 0; color: #78688a; font-size: 10px; line-height: 1.55; }
+.gateway-requirements, .gateway-disclosure-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.gateway-requirements li, .gateway-disclosure-list li { display: flex; align-items: flex-start; gap: 7px; color: #4d3a60; font-size: 10px; line-height: 1.45; }
+.gateway-requirements li svg, .gateway-disclosure-list li svg { flex: 0 0 14px; margin-top: 1px; color: #6d28d9; }
+.gateway-disclosure-list li small { margin-left: auto; color: #806e8f; font-size: 9px; text-align: right; }
+.gateway-disclosure-list .gateway-unavailable-field { color: #847b88; }
+.gateway-disclosure-list .gateway-unavailable-field svg { color: #a2797a; }
+.gateway-data-footnote { padding-top: 8px; border-top: 1px solid #eee7f3; }
+.gateway-destination { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.gateway-destination .gateway-section-label { margin-bottom: 4px; }
+.gateway-destination code { max-width: 100%; overflow-wrap: anywhere; color: #79678d; font: 9px 'DM Mono', monospace; }
+.gateway-destination > span:last-child { color: #84768e; font-size: 9px; }
+.gateway-preview-state { min-height: 88px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 20px; color: #68577a; font-size: 11px; }
+.gateway-preview-error { justify-content: flex-start; color: #9b4352; }
+.gateway-preview-error > div { display: flex; flex-direction: column; gap: 4px; }
+.gateway-preview-error strong { font-size: 11px; }
+.gateway-preview-error span { font-size: 10px; }
+.loading-spinner { width: 17px; height: 17px; border: 2px solid #d9cbe8; border-top-color: #6d28d9; border-radius: 50%; animation: spin .8s linear infinite; }
+.gateway-confirmation-code { display: flex; align-items: center; gap: 15px; margin: 13px 0; padding: 14px; border: 1px solid #c9b3e4; border-radius: 11px; background: #f5effc; }
+.gateway-confirmation-code > div { min-width: 115px; display: flex; flex-direction: column; gap: 5px; }
+.gateway-confirmation-code > div span { color: #78668c; font: 800 7px 'DM Mono', monospace; letter-spacing: .5px; }
+.gateway-confirmation-code > div strong { color: #351753; font: 900 25px 'DM Mono', monospace; letter-spacing: 3px; }
+.gateway-confirmation-code p { margin: 0; color: #665475; font-size: 9px; line-height: 1.55; }
+.gateway-steps-list { display: grid; gap: 0; margin: 5px 0 18px; }
+.gateway-steps-list > div { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #e3d9ec; opacity: .68; }
+.gateway-steps-list > div.gateway-step-current, .gateway-steps-list > div.gateway-step-done { opacity: 1; }
+.gateway-steps-list > div > span { width: 22px; height: 22px; flex: 0 0 22px; display: grid; place-items: center; border: 1px solid #d4c5e2; border-radius: 50%; color: #77658a; font-size: 9px; font-weight: 800; }
+.gateway-steps-list > div.gateway-step-current > span { border-color: #7c4eae; background: #6d28d9; color: white; }
+.gateway-steps-list > div.gateway-step-done > span { border-color: #c3d9c5; background: #e6f1e4; color: #527853; }
+.gateway-steps-list > div > div { display: flex; flex-direction: column; gap: 3px; }
+.gateway-steps-list strong { color: #443153; font-size: 10px; }
+.gateway-steps-list small { color: #7f708b; font-size: 9px; line-height: 1.45; }
+.gateway-compatibility { padding: 13px; border: 1px solid #e0d5eb; border-radius: 10px; background: #faf7fd; }
+.gateway-compatibility-heading { display: flex; align-items: center; gap: 7px; color: #543976; font-size: 10px; }
+.gateway-compatibility > ul { display: grid; gap: 10px; margin: 12px 0; padding: 0; list-style: none; }
+.gateway-compatibility > ul > li { display: flex; align-items: flex-start; gap: 8px; color: #6d28d9; }
+.gateway-compatibility > ul > li > span { display: flex; flex-direction: column; gap: 3px; }
+.gateway-compatibility > ul strong { color: #4a375e; font-size: 9px; }
+.gateway-compatibility > ul small { color: #81728c; font-size: 8px; line-height: 1.4; }
+.gateway-compatibility > p { margin: 0; padding-top: 9px; border-top: 1px solid #e9e0f0; color: #6c557e; font-size: 8px; line-height: 1.5; }
+.public-shell .gateway-layout { overflow: hidden; border-color: #dfd4e8; border-radius: 16px; background: #fff; box-shadow: 0 12px 35px #1c083612; }
+.public-shell .gateway-flow-panel, .public-shell .gateway-policy-panel { padding: 24px; }
+.public-shell .gateway-flow-panel { border-color: #eee7f3; }
+.public-shell .gateway-step-heading h2 { font-size: 15px; }
+.public-shell .gateway-step-heading p { font-size: 10px; }
+.public-shell .gateway-form { margin-top: 24px; }
+.public-shell .gateway-dip-input { height: 49px; border-radius: 9px; font-size: 16px; }
+.public-shell .gateway-input-note { font-size: 9px; }
+.public-shell .gateway-continue { min-height: 43px; border-radius: 9px; font-size: 11px; }
+.public-shell .gateway-identified { border-radius: 10px; }
+.public-shell .priority-method { border-radius: 9px; }
+.public-shell .gateway-confirmation-code + .button-primary { width: 100%; justify-content: center; }
+.public-shell .gateway-privacy-footer { font-size: 9px; }
 
 .floating-plan-button { position: fixed; z-index: 12; right: 20px; bottom: 20px; min-height: 53px; display: flex; align-items: center; gap: 9px; padding: 6px 11px 6px 7px; border: 2px solid #c4b5fd; border-radius: 999px; background: #1c0836; color: #fff; box-shadow: 4px 4px 0 #8b5cf6; cursor: pointer; transition: transform .18s; }
 .floating-plan-button:hover { transform: translateY(-3px); }

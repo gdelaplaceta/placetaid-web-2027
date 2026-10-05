@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { supabase, supabaseReady } from './supabase.js'
 import { createRandomToken, encryptSecret, hashToken, isValidDip, normalizeDip, secureEquals, signSession, verifySession } from './security.js'
 import { legacyApi } from './legacy/api.js'
@@ -690,19 +691,46 @@ api.post('/public/identify', authLimiter, async (req, res) => {
     if (devicesError) throw devicesError
     if (authenticatorError) throw authenticatorError
     const sessions = new Set((devices || []).map((row) => row.method))
-    const method = authenticator?.enabled && sessions.has('authenticator') ? 'authenticator' : sessions.has('mobile') ? 'mobile' : sessions.has('desktop') ? 'desktop' : null
+    const method = sessions.has('mobile') ? 'mobile' : authenticator?.enabled && sessions.has('authenticator') ? 'authenticator' : sessions.has('desktop') ? 'desktop' : null
     if (!method) return fail(res, 409, 'NO_ACTIVE_METHOD', 'No hay un método de identificación activo. Abre PlacetaID Móvil, inicia sesión con las credenciales de tu cuenta y vincula el dispositivo; después vuelve a intentarlo.')
 
+    const confirmationCode = randomBytes(4).toString('hex').toUpperCase()
     const { data: request, error: requestError } = await supabase.from('plid_v27_auth_requests').insert({
-      request_code: createRandomToken(18), user_id: user.id, app_id: app?.id ?? null, service_id: service?.id ?? null,
+      request_code: confirmationCode, user_id: user.id, app_id: app?.id ?? null, service_id: service?.id ?? null,
       method, state: String(req.body?.state || '').slice(0, 300) || null,
       redirect_uri: app ? req.body.redirectUri : null,
       status: 'pending',
-    }).select('id,method,expires_at').single()
+    }).select('id,request_code,method,expires_at').single()
     if (requestError) throw requestError
+    if (method === 'mobile') {
+      const appName = app?.name || 'PlacetaID'
+      const serviceName = service?.name || 'acceso seguro'
+      const { error: notificationError } = await supabase.from('rsp_notificaciones').insert({
+        id: randomUUID(),
+        nivel: 'info',
+        titulo: `Solicitud de acceso: ${appName}`,
+        mensaje: `${appName} · ${serviceName} solicita una identificación. Comprueba que el código ${confirmationCode} coincide con el de la pasarela antes de aprobar.`,
+        servicio: 'placetaid',
+        destinatario_dip: dip,
+        objeto_tipo: 'auth_request',
+        objeto_id: request.id,
+        leida: false,
+        fecha: new Date().toISOString(),
+        canal: 'inapp',
+      })
+      if (notificationError) {
+        const { error: cleanupError } = await supabase.from('plid_v27_auth_requests')
+          .delete().eq('id', request.id).eq('status', 'pending')
+        if (cleanupError) {
+          console.error('[PlacetaID API] Could not remove request after notification failure:', cleanupError.message)
+        }
+        throw notificationError
+      }
+    }
     res.status(201).json({
       requestId: request.id,
       method: request.method,
+      confirmationCode: request.request_code,
       expiresAt: request.expires_at,
       app: app ? { name: app.name } : null,
       service: service ? { name: service.name } : null,
@@ -711,6 +739,56 @@ api.post('/public/identify', authLimiter, async (req, res) => {
         optional: shareableConsentFields.filter((field) => app?.scopes?.[field]),
         unavailable: unavailableConsentFields.filter((field) => app?.scopes?.[field]),
         destination: app ? req.body.redirectUri : null,
+      },
+    })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.get('/public/authorize/preview', authLimiter, async (req, res) => {
+  const clientId = String(req.query.client_id || '')
+  const redirectUri = String(req.query.redirect_uri || '')
+  const serviceKey = String(req.query.service || '')
+  if (!clientId || !redirectUri || !isAllowedRedirectUri(redirectUri)) {
+    return fail(res, 400, 'INVALID_AUTHORIZATION_REQUEST', 'Faltan los datos válidos de la solicitud de autorización.')
+  }
+  try {
+    const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
+      .select('id,name,description,category,initials,color,redirect_uris,status,min_age,allowed_roles,scopes')
+      .eq('client_id', clientId)
+      .eq('status', 'authorized')
+      .maybeSingle()
+    if (appError) throw appError
+    if (!app || !Array.isArray(app.redirect_uris) || !app.redirect_uris.includes(redirectUri)) {
+      return fail(res, 403, 'APP_NOT_AUTHORIZED', 'La aplicación o la dirección de retorno no están autorizadas.')
+    }
+
+    let serviceQuery = supabase.from('plid_v27_services')
+      .select('name,description,min_age,allowed_roles')
+      .eq('app_id', app.id)
+      .eq('enabled', true)
+    if (serviceKey) serviceQuery = serviceQuery.eq('service_key', serviceKey)
+    else serviceQuery = serviceQuery.order('created_at').limit(1)
+    const { data: service, error: serviceError } = await serviceQuery.maybeSingle()
+    if (serviceError) throw serviceError
+    if (!service) return fail(res, 403, 'SERVICE_NOT_AVAILABLE', 'El servicio solicitado no está disponible.')
+
+    const appRoles = Array.isArray(app.allowed_roles) ? app.allowed_roles : []
+    const serviceRoles = Array.isArray(service.allowed_roles) ? service.allowed_roles : appRoles
+    const allowedRoles = appRoles.filter((role) => serviceRoles.includes(role))
+    res.json({
+      app: { name: app.name, description: app.description, category: app.category, initials: app.initials, color: app.color },
+      service: { name: service.name, description: service.description },
+      destination: redirectUri,
+      requirements: {
+        minAge: Math.max(Number(app.min_age) || 0, Number(service.min_age) || 0),
+        allowedRoles,
+        activeAccount: true,
+        linkedMethod: true,
+      },
+      disclosure: {
+        base: baseDisclosureFields,
+        optional: shareableConsentFields.filter((field) => app.scopes?.[field]),
+        unavailable: unavailableConsentFields.filter((field) => app.scopes?.[field]),
       },
     })
   } catch (error) { handleDbError(res, error) }

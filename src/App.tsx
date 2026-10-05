@@ -46,11 +46,19 @@ type ConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked'
 type GatewayStage = 'entry' | 'detected' | 'legal' | 'consent' | 'authenticated'
 type LegalDocument = 'terms' | 'privacy'
 type GatewayMethod = 'mobile' | 'authenticator' | 'desktop'
+type GatewayPreview = {
+  app: { name: string; description: string; category: string; initials: string; color: string }
+  service: { name: string; description: string }
+  destination: string
+  requirements: { minAge: number; allowedRoles: Role[]; activeAccount: boolean; linkedMethod: boolean }
+  disclosure: { base: string[]; optional: ProtectedField[]; unavailable: ProtectedField[] }
+}
 type GatewayResponse = {
   stage?: string
   error?: string
   login_correct?: boolean
   requestId?: string
+  confirmationCode?: string
   method?: GatewayMethod
   claims?: Record<string, string | boolean | undefined>
   fields?: ProtectedField[]
@@ -292,12 +300,6 @@ function gatewayClaimLabel(field: string) {
   return labels[field] ?? field
 }
 
-function gatewayConsentQualifier(field: ProtectedField) {
-  return field === 'identityVerified'
-    ? 'Solo si tu identidad está verificada y das permiso'
-    : 'Solo si das permiso expresamente'
-}
-
 function isShareableConsentField(field: ProtectedField) {
   return field !== 'phone' && field !== 'photo'
 }
@@ -341,10 +343,13 @@ function App() {
   const [gatewayNeedsEnrollment, setGatewayNeedsEnrollment] = useState(false)
   const [gatewayOtp, setGatewayOtp] = useState('')
   const [gatewayRequestId, setGatewayRequestId] = useState('')
+  const [gatewayConfirmationCode, setGatewayConfirmationCode] = useState('')
   const [gatewayMethod, setGatewayMethod] = useState<GatewayMethod | null>(null)
   const [gatewayAppName, setGatewayAppName] = useState('')
   const [gatewayServiceName, setGatewayServiceName] = useState('')
-  const [gatewayDisclosure, setGatewayDisclosure] = useState<GatewayResponse['disclosure'] | null>(null)
+  const [gatewayPreview, setGatewayPreview] = useState<GatewayPreview | null>(null)
+  const [gatewayPreviewLoading, setGatewayPreviewLoading] = useState(initialGatewayRequest.bound)
+  const [gatewayPreviewError, setGatewayPreviewError] = useState('')
   const [gatewayClaims, setGatewayClaims] = useState<Record<string, string | boolean | undefined> | null>(null)
   const [gatewayConsentFields, setGatewayConsentFields] = useState<ProtectedField[]>([])
   const [gatewayIntegrations, setGatewayIntegrations] = useState<Integration[]>([])
@@ -371,6 +376,35 @@ function App() {
         }
       })
       .catch(() => { if (active) setSupabaseStatus('offline') })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (!initialGatewayRequest.bound) return
+    if (!initialGatewayRequest.valid) {
+      setGatewayPreviewLoading(false)
+      setGatewayPreviewError('La solicitud no incluye una aplicación y una dirección de retorno válidas.')
+      return
+    }
+    let active = true
+    const params = new URLSearchParams(window.location.search)
+    const previewUrl = new URL('/api/public/authorize/preview', window.location.origin)
+    previewUrl.searchParams.set('client_id', params.get('client_id') || params.get('clientId') || '')
+    previewUrl.searchParams.set('redirect_uri', initialGatewayRequest.redirectUri)
+    if (initialGatewayRequest.serviceKey) previewUrl.searchParams.set('service', initialGatewayRequest.serviceKey)
+    fetch(previewUrl)
+      .then(async (response) => {
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.message || 'No se pudo validar la solicitud de la aplicación.')
+        if (active) {
+          setGatewayPreview(payload)
+          setGatewayAppName(payload.app.name)
+          setGatewayServiceName(payload.service.name)
+        }
+      })
+      .catch((error) => {
+        if (active) setGatewayPreviewError(error instanceof Error ? error.message : 'No se pudo validar la aplicación solicitante.')
+      })
+      .finally(() => { if (active) setGatewayPreviewLoading(false) })
     return () => { active = false }
   }, [])
   useEffect(() => {
@@ -606,8 +640,11 @@ function App() {
       setGatewayError('La solicitud no incluye un client_id y redirect_uri válidos.')
       return
     }
+    if (initialGatewayRequest.bound && !gatewayPreview) {
+      setGatewayError(gatewayPreviewError || 'Aún no se ha podido verificar la aplicación solicitante.')
+      return
+    }
     setGatewayBusy(true)
-    setGatewayDisclosure(null)
     try {
       const params = new URLSearchParams(window.location.search)
       const response = await fetch('/api/public/identify', {
@@ -638,10 +675,10 @@ function App() {
         return
       }
       setGatewayRequestId(payload.requestId)
+      setGatewayConfirmationCode(payload.confirmationCode || '')
       setGatewayMethod(payload.method)
       setGatewayAppName(payload.app?.name || '')
       setGatewayServiceName(payload.service?.name || '')
-      setGatewayDisclosure(payload.disclosure ?? null)
       setGatewayClaims(null)
       setGatewayConsentFields([])
       setGatewayOtp('')
@@ -724,8 +761,9 @@ function App() {
       }
 
       setGatewayError('Aprueba la solicitud desde tu dispositivo vinculado…')
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000))
+      const pollUntil = Date.now() + 295_000
+      while (Date.now() < pollUntil) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2500))
         const response = await fetch(`/api/public/auth-requests/${encodeURIComponent(gatewayRequestId)}`)
         const payload: GatewayResponse = await response.json()
         if (!response.ok) {
@@ -736,7 +774,7 @@ function App() {
         await processGatewayResponse(payload)
         return
       }
-      setGatewayError('La solicitud ha caducado o no fue aprobada.')
+      setGatewayError('La solicitud ha caducado o no fue aprobada. Vuelve a iniciar el acceso para generar otra.')
     } catch {
       setGatewayError('No se pudo completar la autenticación con el servidor.')
     } finally {
@@ -828,9 +866,9 @@ function App() {
       setGatewayIntegrations([])
       setGatewayStage('entry')
       setGatewayRequestId('')
+      setGatewayConfirmationCode('')
       setGatewayMethod(null)
       setGatewayClaims(null)
-      setGatewayDisclosure(null)
       setGatewayDip('')
       setGatewayError('')
       setView('gateway')
@@ -842,8 +880,8 @@ function App() {
   function rejectLegalDocuments() {
     setGatewayStage('entry')
     setGatewayRequestId('')
+    setGatewayConfirmationCode('')
     setGatewayMethod(null)
-    setGatewayDisclosure(null)
     setGatewayUser(null)
     setGatewayError('Para usar PlacetaID debes aceptar los términos y la política de privacidad.')
   }
@@ -1134,7 +1172,33 @@ function App() {
         </div>}
 
         {view === 'gateway' && <div className="page-content gateway-page" data-gateway-stage={gatewayStage}>
-          <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />AUTENTICACIÓN SEGURA</div><h1>Accede con PlacetaID</h1><p>Tu DIP localiza la identidad. El acceso se confirma con un método vinculado a tu cuenta.</p></div><span className={`simulator-tag system-${supabaseStatus}`}><Fingerprint size={14} />{supabaseStatus === 'ready' ? 'SUPABASE ACTIVO' : 'SERVICIO NO DISPONIBLE'}</span></section>
+          <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />AUTENTICACIÓN SEGURA</div><h1>{gatewayPreview ? `Acceso a ${gatewayPreview.app.name}` : 'Accede con PlacetaID'}</h1><p>Tu DIP localiza la identidad. El acceso se confirma con un método vinculado a tu cuenta.</p></div><span className={`simulator-tag system-${supabaseStatus}`}><Fingerprint size={14} />{supabaseStatus === 'ready' ? 'SERVICIO DISPONIBLE' : 'SERVICIO NO DISPONIBLE'}</span></section>
+          {initialGatewayRequest.bound && <section className="gateway-request-card" aria-label="Detalles de la solicitud">
+            {gatewayPreviewLoading ? <div className="gateway-preview-state"><span className="loading-spinner" /><span>Verificando la aplicación y sus permisos…</span></div>
+              : gatewayPreviewError ? <div className="gateway-preview-state gateway-preview-error"><ShieldAlert size={18} /><div><strong>Solicitud no verificada</strong><span>{gatewayPreviewError}</span></div></div>
+                : gatewayPreview && <>
+                  <div className="gateway-request-heading">
+                    <span className={`gateway-app-mark app-mark-${gatewayPreview.app.color}`}>{gatewayPreview.app.initials}</span>
+                    <div className="gateway-app-copy"><span className="gateway-verified-label"><ShieldCheck size={12} />APLICACIÓN VERIFICADA</span><h2>{gatewayPreview.app.name}</h2><p>{gatewayPreview.app.description || gatewayPreview.app.category}</p></div>
+                    <span className="gateway-request-badge"><LockKeyhole size={13} />Acceso seguro</span>
+                  </div>
+                  <div className="gateway-request-grid">
+                    <div className="gateway-request-section"><span className="gateway-section-label">SERVICIO SOLICITADO</span><strong>{gatewayPreview.service.name}</strong><p>{gatewayPreview.service.description || 'La aplicación ha solicitado identificarte para este servicio.'}</p></div>
+                    <div className="gateway-request-section"><span className="gateway-section-label">REQUISITOS DE ACCESO</span><ul className="gateway-requirements">
+                      <li><Check size={13} />Cuenta PlacetaID activa</li>
+                      {gatewayPreview.requirements.minAge > 0 && <li><Check size={13} />Edad mínima: {gatewayPreview.requirements.minAge} años</li>}
+                      {gatewayPreview.requirements.allowedRoles.length > 0 && <li><Check size={13} />Tipo de cuenta: {gatewayPreview.requirements.allowedRoles.map((role) => roleLabels[role] || role).join(', ')}</li>}
+                      <li><Check size={13} />Confirmación desde un método vinculado</li>
+                    </ul></div>
+                    <div className="gateway-request-section"><span className="gateway-section-label">DATOS QUE RECIBIRÁ</span><ul className="gateway-disclosure-list">
+                      {gatewayPreview.disclosure.base.map((field) => <li key={field}><Check size={13} />{gatewayClaimLabel(field)}</li>)}
+                      {gatewayPreview.disclosure.optional.map((field) => <li key={field}><LockKeyhole size={13} />{protectedFieldLabel(field)}<small>Solo con tu permiso</small></li>)}
+                      {gatewayPreview.disclosure.unavailable.map((field) => <li key={field} className="gateway-unavailable-field"><X size={13} />{protectedFieldLabel(field)}<small>No disponible; no se enviará</small></li>)}
+                    </ul><p className="gateway-data-footnote">No se comparten tu contraseña ni tus códigos de autenticación. Los datos protegidos requieren tu autorización expresa.</p></div>
+                    <div className="gateway-request-section gateway-destination"><span className="gateway-section-label">DESTINO DE LA RESPUESTA</span><strong>{new URL(gatewayPreview.destination).host}</strong><code>{new URL(gatewayPreview.destination).pathname}</code><span>La respuesta de acceso volverá a esta dirección registrada.</span></div>
+                  </div>
+                </>}
+          </section>}
           <div className="gateway-layout">
             <section className="gateway-flow-panel">
               <h1 className="gateway-wordmark">PlacetaID</h1>
@@ -1149,12 +1213,13 @@ function App() {
                   <p>Abre PlacetaID Móvil e inicia sesión con el DIP y la contraseña de tu cuenta PL26. Desde la app, vincula este dispositivo; después vuelve aquí para iniciar sesión.</p>
                   <a className="button-quiet" href="https://play.google.com/store/search?q=PlacetaID&c=apps" target="_blank" rel="noreferrer">Buscar PlacetaID en Google Play</a>
                 </div>}
-                <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || supabaseStatus !== 'ready'}>{gatewayBusy ? 'Buscando identidad…' : 'Continuar'} <ArrowRight size={15} /></button>
+                <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || supabaseStatus !== 'ready' || (initialGatewayRequest.bound && (gatewayPreviewLoading || !gatewayPreview))}>{gatewayBusy ? 'Buscando identidad…' : 'Continuar'} <ArrowRight size={15} /></button>
               </form>}
               {gatewayStage === 'detected' && <div className="method-detection">
-                <div className="gateway-identified"><span className="user-avatar user-avatar-large"><Fingerprint size={20} /></span><div><strong>Cuenta localizada</strong><small>Datos personales ocultos hasta completar la autenticación</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayRequestId(''); setGatewayMethod(null); setGatewayDisclosure(null); setGatewayError(''); setGatewayNeedsEnrollment(false) }}>Cambiar DIP</button></div>
+                <div className="gateway-identified"><span className="user-avatar user-avatar-large"><Fingerprint size={20} /></span><div><strong>Cuenta localizada</strong><small>Datos personales ocultos hasta completar la autenticación</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayRequestId(''); setGatewayConfirmationCode(''); setGatewayMethod(null); setGatewayError(''); setGatewayNeedsEnrollment(false) }}>Cambiar DIP</button></div>
                 <div className="gateway-step-heading"><span className="step-number">02</span><div><h2>Confirma tu identidad</h2><p>{gatewayMethod === 'mobile' ? 'Aprueba la solicitud en PlacetaID móvil.' : gatewayMethod === 'desktop' ? 'Aprueba la solicitud en PlacetaID Desktop.' : 'Introduce el código actual de tu Autentificador.'}</p></div></div>
                 <div className="priority-method priority-method-selected"><span className="priority-method-icon">{gatewayMethod === 'mobile' ? <Smartphone size={16} /> : gatewayMethod === 'desktop' ? <Monitor size={16} /> : <KeyRound size={16} />}</span><span><strong>{gatewayMethod === 'mobile' ? 'PlacetaID móvil' : gatewayMethod === 'desktop' ? 'PlacetaID Desktop' : 'Autentificador'}</strong><small>Solicitud protegida y temporal</small></span><span className="priority-method-state">VINCULADO</span></div>
+                {(gatewayMethod === 'mobile' || gatewayMethod === 'desktop') && gatewayConfirmationCode && <div className="gateway-confirmation-code" role="status" aria-live="polite"><div><span>CÓDIGO DE CONFIRMACIÓN</span><strong>{gatewayConfirmationCode}</strong></div><p>Abre la solicitud en PlacetaID {gatewayMethod === 'mobile' ? 'Móvil' : 'Desktop'} y comprueba que aparece este mismo código antes de aprobar. Si no coincide, recházala.</p></div>}
                 {gatewayMethod === 'authenticator' && <><label className="field-label gateway-otp-label" htmlFor="gateway-otp">Código de seis cifras</label><input className="gateway-otp-input" id="gateway-otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={gatewayOtp} onChange={(event) => { setGatewayOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setGatewayError('') }} placeholder="000000" /></>}
                 {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
                 <button className="button-primary gateway-continue" disabled={gatewayBusy} onClick={confirmGatewayIdentity}>{gatewayBusy ? 'Esperando confirmación segura…' : gatewayMethod === 'authenticator' ? 'Verificar código' : 'Esperar aprobación del dispositivo'} <ArrowRight size={15} /></button>
@@ -1176,17 +1241,18 @@ function App() {
               {gatewayStage === 'authenticated' && <div className="gateway-authenticated"><span className="gateway-auth-icon"><ShieldCheck size={18} /></span><div><strong>Identidad autenticada</strong><small>{gatewayUser ? `${gatewayUser.name} ${gatewayUser.surname} · ${gatewayUser.placeid}` : 'Acceso confirmado por PlacetaID'}</small></div></div>}
             </section>
             <section className="gateway-policy-panel">
-              <div className="gateway-step-heading"><span className={`step-number ${gatewayStage === 'authenticated' ? 'step-complete' : ''}`}>{gatewayStage === 'authenticated' ? <Check size={13} /> : '02'}</span><div><h2>{gatewayAppName || (initialGatewayRequest.bound ? 'Aplicación solicitante' : 'Inicio de sesión PlacetaID')}</h2><p>{gatewayServiceName || 'Solicitud de acceso a tu identidad'}</p></div></div>
-              {gatewayDisclosure ? <div className="gateway-disclosure">
-                <div className="gateway-disclosure-destination"><strong>Aplicación que recibirá la respuesta</strong><span>{gatewayDisclosure.destination || 'Sesión iniciada en PlacetaID'}</span></div>
-                <h3>Datos básicos incluidos</h3>
-                <ul>{(gatewayDisclosure.base ?? []).map((field) => <li key={field}><Check size={13} />{gatewayClaimLabel(field)}</li>)}</ul>
-                <h3>Datos protegidos solicitados</h3>
-                {(gatewayDisclosure.optional?.length ?? 0) > 0 ? <ul>{gatewayDisclosure.optional?.map((field) => <li key={field}><LockKeyhole size={13} />{protectedFieldLabel(field)} <small>{gatewayConsentQualifier(field)}</small></li>)}</ul> : null}
-                {(gatewayDisclosure.unavailable?.length ?? 0) > 0 ? <ul>{gatewayDisclosure.unavailable?.map((field) => <li key={field}><X size={13} />{protectedFieldLabel(field)} <small>No disponible; no se transmitirá</small></li>)}</ul> : null}
-                {(gatewayDisclosure.optional?.length ?? 0) === 0 && (gatewayDisclosure.unavailable?.length ?? 0) === 0 ? <p className="gateway-disclosure-empty">Esta solicitud no pide datos protegidos adicionales.</p> : null}
-                <p className="gateway-disclosure-note">Estos datos solo se transmiten si la aplicación está autorizada y das el permiso indicado. Puedes denegar la solicitud o revocar el permiso después.</p>
-              </div> : <div className="gateway-locked-state"><LockKeyhole size={20} /><strong>{gatewayStage === 'entry' ? 'Solicitud segura' : 'Autenticación en curso'}</strong><span>Cuando se valide la aplicación solicitante, aquí verás el servicio y los datos que recibirá antes de confirmar.</span></div>}
+              <div className="gateway-step-heading"><span className={`step-number ${gatewayStage === 'authenticated' ? 'step-complete' : ''}`}>{gatewayStage === 'authenticated' ? <Check size={13} /> : '02'}</span><div><h2>{gatewayStage === 'authenticated' ? 'Acceso confirmado' : 'Cómo funciona la confirmación'}</h2><p>{gatewayAppName ? `${gatewayAppName} · ${gatewayServiceName}` : 'Protección de tu cuenta PlacetaID'}</p></div></div>
+              <div className="gateway-steps-list">
+                <div className={gatewayStage !== 'entry' ? 'gateway-step-done' : 'gateway-step-current'}><span>{gatewayStage !== 'entry' ? <Check size={12} /> : '1'}</span><div><strong>Localizamos tu cuenta</strong><small>El DIP no es una contraseña ni se envía a la aplicación solicitante.</small></div></div>
+                <div className={gatewayStage === 'legal' || gatewayStage === 'consent' || gatewayStage === 'authenticated' ? 'gateway-step-done' : gatewayStage === 'detected' ? 'gateway-step-current' : ''}><span>{gatewayStage === 'legal' || gatewayStage === 'consent' || gatewayStage === 'authenticated' ? <Check size={12} /> : '2'}</span><div><strong>Confirmas que eres tú</strong><small>Móvil, PlacetaID Desktop o un Autentificador compatible vinculado.</small></div></div>
+                <div className={gatewayStage === 'authenticated' ? 'gateway-step-done' : gatewayStage === 'legal' || gatewayStage === 'consent' ? 'gateway-step-current' : ''}><span>{gatewayStage === 'authenticated' ? <Check size={12} /> : '3'}</span><div><strong>Revisas permisos y condiciones</strong><small>Los datos protegidos requieren tu permiso explícito.</small></div></div>
+                <div className={gatewayStage === 'authenticated' ? 'gateway-step-done' : ''}><span>{gatewayStage === 'authenticated' ? <Check size={12} /> : '4'}</span><div><strong>Vuelves a la aplicación</strong><small>La respuesta se entrega solo a la dirección registrada que aparece arriba.</small></div></div>
+              </div>
+              <div className="gateway-compatibility"><div className="gateway-compatibility-heading"><ShieldCheck size={15} /><strong>Métodos compatibles</strong></div><ul>
+                <li><Smartphone size={14} /><span><strong>PlacetaID Móvil</strong><small>Revisa la solicitud pendiente y compara el código antes de aprobar.</small></span></li>
+                <li><Monitor size={14} /><span><strong>PlacetaID Desktop</strong><small>Confirma desde tu equipo previamente vinculado.</small></span></li>
+                <li><KeyRound size={14} /><span><strong>Autentificador anterior</strong><small>Funciona si su secreto verificado ya se migró y vinculó a v27.</small></span></li>
+              </ul><p>Recomendado: migra tus métodos antiguos a PlacetaID v27 para mantenerlos disponibles y protegidos.</p></div>
               {gatewayStage === 'authenticated' && <div className="gateway-response"><div className="payload-heading"><div><h3>Datos efectivamente compartidos</h3><p>Respuesta emitida por PlacetaID</p></div><span className="json-chip">JSON</span></div><pre className="payload-code">{JSON.stringify(gatewayClaims || { login_correct: true }, null, 2)}</pre></div>}
             </section>
           </div>
