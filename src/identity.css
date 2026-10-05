@@ -1347,3 +1347,156 @@ button { min-height: 38px; }
   .public-shell .legal-step-actions { gap: 6px; margin-top: 8px; }
   .public-shell .legal-step-actions button { min-height: 36px; font-size: 10px; }
 }
+
+.public-shell { min-height: 100vh; background: #f6f7f9; color: #1d2939; }
+.public-topbar { min-height: 60px; padding: 0 max(20px, calc((100vw - 1080px) / 2)); border-bottom: 1px solid #e7e9ee; background: #fff; }
+.public-shell-oauth .admin-entry { display: none; }
+.public-main { min-height: calc(100vh - 104px); overflow: visible; background: #f6f7f9; }
+.public-shell .gateway-page { min-height: calc(100vh - 104px); justify-content: center; padding: 32px 18px 42px; }
+.public-shell .gateway-page::before, .public-shell .gateway-page::after { display: none; }
+.public-shell .gateway-layout { width: min(430px, 100%); gap: 0; overflow: hidden; border: 1px solid #e3e6eb; border-radius: 14px; background: #fff; box-shadow: 0 12px 36px #1720330d; }
+.public-shell .gateway-flow-panel { padding: 25px 27px 24px; border: 0; background: #fff; color: #1d2939; box-shadow: none; }
+.public-shell .gateway-policy-panel { display: none; }
+.public-shell .gateway-page[data-gateway-stage="authenticated"] .gateway-policy-panel { display: block; }
+.public-shell .gateway-wordmark-row, .public-shell .gateway-tagline { display: none; }
+.public-shell .gateway-page .gateway-step-heading { margin: 1px 0 16px; }
+.public-shell .gateway-page .gateway-step-heading .step-number { display: none; }
+.public-shell .gateway-page .gateway-step-heading h2 { margin: 0 0 5px; color: #17212f; font: 700 20px/1.25 'Plus Jakarta Sans', sans-serif; letter-spacing: -.35px; }
+.public-shell .gateway-page .gateway-step-heading p { color: #667085; font-size: 12px; line-height: 1.5; }
+.public-shell .gateway-page .gateway-form { margin: 0; }
+.public-shell .gateway-page .gateway-form .field-label { margin: 0 0 7px; color: #344054; font-size: 12px; font-weight: 700; }
+.public-shell .gateway-page .gateway-dip-input, .public-shell .gateway-page .gateway-password-input { height: 46px; padding: 0 12px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; color: #17212f; font: 500 15px 'Plus Jakarta Sans', sans-serif; letter-spacing: .3px; box-shadow: 0 1px 2px #1018280d; }
+.public-shell .gateway-page .gateway-dip-input:focus, .public-shell .gateway-page .gateway-password-input:focus, .public-shell .gateway-page .gateway-otp-input:focus { border-color: var(--gateway-brand, #475467); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gateway-brand, #475467) 13%, transparent); }
+.public-shell .gateway-page .gateway-input-note { margin-top: 8px; color: #667085; font-size: 10px; line-height: 1.45; }
+.public-shell .gateway-page .gateway-continue { min-height: 44px; margin-top: 17px; border: 1px solid var(--gateway-brand, #344054); border-radius: 8px; background: var(--gateway-brand, #344054); color: #fff; font-size: 13px; font-weight: 700; box-shadow: none; transition: filter .15s, transform .15s; }
+.public-shell .gateway-page .gateway-continue:hover { transform: none; filter: brightness(.92); }
+.public-shell .gateway-page .gateway-continue:disabled { opacity: .55; cursor: not-allowed; }
+.public-shell .gateway-progress { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 0 23px; padding: 0; list-style: none; }
+.public-shell .gateway-progress li { position: relative; display: flex; align-items: center; gap: 7px; color: #98a2b3; }
+.public-shell .gateway-progress li:not(:last-child)::after { position: absolute; top: 12px; left: 27px; right: 8px; height: 1px; background: #eaecf0; content: ''; }
+.public-shell .gateway-progress li > span { z-index: 1; width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border: 1px solid #d0d5dd; border-radius: 50%; background: #fff; color: #667085; font-size: 10px; font-weight: 700; }
+.public-shell .gateway-progress li small { color: #667085; font-size: 10px; font-weight: 600; }
+.public-shell .gateway-progress li.is-current > span { border-color: var(--gateway-brand, #344054); background: var(--gateway-brand, #344054); color: #fff; }
+.public-shell .gateway-progress li.is-current small { color: #344054; }
+.public-shell .gateway-progress li.is-done > span { border-color: #a6d8b6; background: #ecfdf3; color: #067647; }
+.public-shell .gateway-progress li.is-done small { color: #667085; }
+.public-shell .gateway-request-card { width: min(430px, 100%); margin: 0 0 10px; overflow: hidden; border: 1px solid #e3e6eb; border-radius: 12px; background: #fff; box-shadow: 0 2px 8px #17203308; }
+.public-shell .gateway-request-heading { gap: 11px; padding: 12px 15px; border: 0; background: #fff; }
+.public-shell .gateway-app-mark { width: 38px; height: 38px; flex-basis: 38px; overflow: hidden; border: 1px solid #eaecf0; border-radius: 9px; background: #f8fafc; color: #344054; font-size: 12px; }
+.public-shell .gateway-app-mark img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.public-shell .gateway-app-copy h2 { margin: 2px 0; color: #17212f; font-size: 13px; font-weight: 700; }
+.public-shell .gateway-app-copy p { color: #667085; font-size: 10px; }
+.public-shell .gateway-verified-label { color: #067647; font-size: 8px; letter-spacing: .35px; }
+.public-shell .gateway-request-badge { padding: 5px 7px; border: 1px solid #eaecf0; border-radius: 999px; background: #fff; color: #667085; font-size: 9px; }
+.public-shell .gateway-request-details { border-top: 1px solid #f0f1f3; }
+.public-shell .gateway-request-details > summary { min-height: 37px; display: flex; align-items: center; gap: 7px; padding: 0 14px; color: #475467; font-size: 10px; font-weight: 600; cursor: pointer; list-style: none; }
+.public-shell .gateway-request-details > summary::-webkit-details-marker { display: none; }
+.public-shell .gateway-request-details > summary svg:first-child { color: #667085; }
+.public-shell .gateway-request-details > summary svg:last-child { margin-left: auto; transition: transform .15s; }
+.public-shell .gateway-request-details[open] > summary svg:last-child { transform: rotate(180deg); }
+.public-shell .gateway-request-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #f0f1f3; }
+.public-shell .gateway-request-section { padding: 11px 13px; border-color: #f0f1f3; }
+.public-shell .gateway-section-label { margin-bottom: 6px; font-size: 8px; }
+.public-shell .gateway-request-section > strong { font-size: 10px; }
+.public-shell .gateway-request-section > p, .public-shell .gateway-requirements li, .public-shell .gateway-disclosure-list li { font-size: 9px; }
+.public-shell .gateway-disclosure-list li small { font-size: 8px; }
+.public-shell .gateway-data-footnote { padding-top: 6px; font-size: 8px; }
+.public-shell .gateway-destination code, .public-shell .gateway-destination > span:last-child { font-size: 8px; }
+.public-shell .method-detection { margin-top: 0; padding-top: 0; border-top: 0; }
+.public-shell .method-detection > .gateway-step-heading, .public-shell .gateway-password-form > .gateway-step-heading, .public-shell .legal-consent-step > .gateway-step-heading { display: none; }
+.public-shell .gateway-identified { min-height: 55px; border: 1px solid #eaecf0; border-radius: 8px; background: #f9fafb; }
+.public-shell .gateway-identified .user-avatar-large { width: 34px; height: 34px; flex-basis: 34px; border-radius: 50%; background: #f2f4f7; color: #475467; }
+.public-shell .gateway-identified > div strong { color: #344054; font-size: 11px; }
+.public-shell .gateway-identified > div small { color: #667085; font-size: 9px; }
+.public-shell .gateway-otp-input { height: 46px; border: 1px solid #d0d5dd; border-radius: 8px; color: #17212f; }
+.public-shell .gateway-otp-label { margin: 13px 0 7px; color: #344054; font-size: 11px; }
+.public-shell .priority-method { min-height: 48px; border: 1px solid #e3e6eb; border-radius: 8px; background: #f9fafb; }
+.public-shell .priority-method-selected { border-color: color-mix(in srgb, var(--gateway-brand, #344054) 30%, white); background: color-mix(in srgb, var(--gateway-brand, #344054) 6%, white); }
+.public-shell .priority-method-selected strong { color: #344054; }
+.public-shell .priority-method-selected small, .public-shell .priority-method-selected .priority-method-state { color: #667085; }
+.public-shell .priority-method-icon { border-radius: 7px; background: #f2f4f7; }
+.public-shell .gateway-page .gateway-password-link { margin-top: 13px; color: var(--gateway-brand, #344054); font-size: 11px; text-decoration: none; }
+.public-shell .gateway-privacy-footer { max-width: 430px; margin: 13px auto 0; color: #667085; font-size: 10px; text-align: left; }
+.public-shell .gateway-privacy-footer svg { color: #667085; }
+.public-footer { max-width: none; display: flex; justify-content: space-between; gap: 12px; padding: 12px max(20px, calc((100vw - 1080px) / 2)); border-top: 1px solid #e7e9ee; color: #667085; font-size: 10px; }
+
+@media (max-width: 600px) {
+  .public-topbar { min-height: 56px; padding: 0 16px; }
+  .public-main { min-height: calc(100dvh - 100px); }
+  .public-shell .gateway-page { min-height: calc(100dvh - 100px); justify-content: flex-start; padding: 18px 14px 28px; }
+  .public-shell .gateway-request-card { margin-bottom: 8px; }
+  .public-shell .gateway-request-heading { padding: 11px 12px; }
+  .public-shell .gateway-layout { border-radius: 12px; }
+  .public-shell .gateway-flow-panel { padding: 21px 18px; }
+  .public-shell .gateway-page .gateway-step-heading h2 { font-size: 18px; }
+  .public-shell .gateway-page .gateway-step-heading p { font-size: 11px; }
+  .public-shell .gateway-progress { margin-bottom: 19px; }
+  .public-shell .gateway-progress li { gap: 5px; }
+  .public-shell .gateway-progress li small { font-size: 9px; }
+  .public-shell .gateway-progress li:not(:last-child)::after { left: 25px; right: 5px; }
+  .public-shell .gateway-request-grid { grid-template-columns: 1fr; }
+  .public-shell .gateway-request-section, .public-shell .gateway-request-section:nth-child(2n) { border-right: 0; }
+  .public-shell .gateway-request-badge { padding: 4px 6px; font-size: 8px; }
+  .public-shell .gateway-identified .text-action { font-size: 9px; }
+  .public-footer { flex-wrap: wrap; justify-content: center; padding: 10px 14px; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-shell .gateway-progress *, .public-shell .gateway-page .gateway-continue { transition: none; }
+}
+
+/* Keep the PlacetaID palette and display typography; only tighten the OAuth flow. */
+.public-shell { background: #2b0f54; color: #1c0836; }
+.public-main { background: #2b0f54; }
+.public-shell .gateway-page::before, .public-shell .gateway-page::after { display: block; }
+.public-shell .gateway-flow-panel { background: #efe8ff; color: #2b0f54; box-shadow: 7px 7px 0 #1c0836; }
+.public-shell .gateway-page .gateway-step-heading h2 { color: #1c0836; font-family: 'Baruta', 'Plus Jakarta Sans', sans-serif; font-size: 19px; font-weight: 900; letter-spacing: 0; }
+.public-shell .gateway-page .gateway-step-heading p { color: #6e5d85; }
+.public-shell .gateway-wordmark-row { display: flex; }
+.public-shell .gateway-tagline { display: block; }
+.public-shell .gateway-page .gateway-dip-input, .public-shell .gateway-page .gateway-password-input { border: 2px solid #6d28d9; border-radius: 10px; color: #2b0f54; }
+.public-shell .gateway-page .gateway-continue { border-color: #6d28d9; background: #6d28d9; }
+.public-shell .gateway-page .gateway-continue:hover { background: #4c1d95; }
+.public-shell .gateway-progress li > span { border-color: #cbb9e5; background: #f8f4ff; color: #6d28d9; }
+.public-shell .gateway-progress li:not(:last-child)::after { background: #d9cbed; }
+.public-shell .gateway-progress li small, .public-shell .gateway-progress li.is-current small { color: #6e5d85; }
+.public-shell .gateway-progress li.is-current > span { border-color: #6d28d9; background: #6d28d9; }
+.public-shell .gateway-progress li.is-done > span { border-color: #8b5cf6; background: #e7ddf8; color: #6d28d9; }
+.public-shell .gateway-request-card { border-color: #cfc0e2; border-radius: 13px; background: #fbf9ff; }
+.public-shell .gateway-request-heading { background: linear-gradient(120deg, #f7f1ff, #fff); }
+.public-shell .gateway-app-mark { border-color: #d8c9eb; background: #e8def7; color: #4c267b; }
+.public-shell .gateway-app-copy h2 { color: #241537; font-family: 'Baruta', 'Plus Jakarta Sans', sans-serif; font-weight: 900; }
+.public-shell .gateway-app-copy p { color: #746483; }
+.public-shell .gateway-verified-label { color: #5d4380; }
+.public-shell .gateway-request-badge { border-color: #dcd0e9; background: #fff; color: #664c84; }
+.public-shell .gateway-request-details { border-color: #e9e0f0; }
+.public-shell .gateway-request-details > summary { color: #5d4380; }
+.public-shell .gateway-request-grid, .public-shell .gateway-request-section { border-color: #eee7f3; }
+.public-shell .gateway-request-section > strong { color: #342047; }
+.public-shell .gateway-request-section > p, .public-shell .gateway-requirements li, .public-shell .gateway-disclosure-list li { color: #59466e; }
+.public-shell .gateway-data-footnote { color: #78668e; }
+.public-shell .gateway-progress li.is-done > span { color: #6d28d9; }
+.public-shell .gateway-privacy-footer { color: #ded5f2; }
+.public-footer { color: #d0c1e7; border-top-color: #68458d; }
+.public-shell .public-footer { max-width: 980px; min-height: 52px; margin: 0 auto; padding: 0 20px; border: 0; color: #d0c1e7; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .public-shell .page-content.gateway-page.gateway-page-bound { margin-right: auto; margin-left: auto; }
+  .public-shell .page-content.gateway-page.gateway-page-bound > .gateway-request-card,
+  .public-shell .page-content.gateway-page.gateway-page-bound > .gateway-layout { width: 100%; margin-right: 0; margin-left: 0; }
+  .public-shell .page-content.gateway-page:not(.gateway-page-bound) { align-items: center; margin-right: auto; margin-left: auto; }
+}
+
+/* Keep the violet identity palette while making secondary text readable on lavender panels. */
+.app-shell :is(.catalog-layout, .users-layout, .permissions-panel, .gateway-layout, .simulator-layout, .activity-panel, .my-permissions-panel, .integration-modal, .policy-panel) :is(p, small, label, li, time, td, th, .meta, .field-help, .result-live, .table-footer, .no-permissions):not(.service-result-ok):not(.service-result-no):not(.access-result-yes):not(.access-result-no):not(.verified-text):not(.unverified-text) {
+  color: #493957;
+  font-size: max(12px, .75rem);
+  line-height: 1.5;
+}
+.app-shell :is(.catalog-layout, .users-layout, .permissions-panel, .gateway-layout, .simulator-layout, .activity-panel, .my-permissions-panel, .integration-modal, .policy-panel) :is(h3, h4) {
+  color: #28163c;
+  font-size: max(14px, .875rem);
+}
+.app-shell :is(.catalog-layout, .users-layout, .permissions-panel, .gateway-layout, .simulator-layout, .activity-panel, .my-permissions-panel, .integration-modal, .policy-panel) :is(input, select, textarea) {
+  color: #241333;
+}

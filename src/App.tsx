@@ -1230,7 +1230,7 @@ function App() {
         : '#6d28d9'
 
   return (
-    <div className={isPublicView ? 'public-shell' : 'app-shell'} style={isPublicView ? { '--gateway-brand': gatewayBrandColor } as CSSProperties : undefined}>
+    <div className={`${isPublicView ? 'public-shell' : 'app-shell'} ${isPublicView && initialGatewayRequest.bound ? 'public-shell-oauth' : ''}`} style={isPublicView ? { '--gateway-brand': gatewayBrandColor } as CSSProperties : undefined}>
       {!isPublicView && <aside className="sidebar">
         <a className="brand" href="#inicio" aria-label="PlacetaID v27 inicio" onClick={(event) => { event.preventDefault(); setView('gateway') }}>
           <span className="brand-mark"><Fingerprint size={22} strokeWidth={1.8} /></span>
@@ -1424,10 +1424,12 @@ function App() {
                 : gatewayPreview && <>
                   <div className="gateway-request-heading">
                     <span className={`gateway-app-mark app-mark-${gatewayPreview.app.color}`}>{requestingAppLogo ? <img src={requestingAppLogo} alt="" /> : gatewayPreview.app.initials}</span>
-                    <div className="gateway-app-copy"><span className="gateway-verified-label"><ShieldCheck size={12} />APLICACIÓN VERIFICADA</span><h2>{gatewayPreview.app.name}</h2><p>{gatewayPreview.app.description || gatewayPreview.app.category}</p></div>
-                    <span className="gateway-request-badge"><LockKeyhole size={13} />Acceso seguro</span>
+                    <div className="gateway-app-copy"><span className="gateway-verified-label"><ShieldCheck size={12} />SOLICITUD VERIFICADA</span><h2>{gatewayPreview.app.name}</h2><p>Quiere iniciar sesión · {gatewayPreview.service.name}</p></div>
+                    <span className="gateway-request-badge"><LockKeyhole size={13} />PlacetaID</span>
                   </div>
-                  <div className="gateway-request-grid">
+                  <details className="gateway-request-details">
+                    <summary><ShieldCheck size={14} /><span>Revisar datos, permisos y destino</span><ChevronDown size={14} /></summary>
+                    <div className="gateway-request-grid">
                     <div className="gateway-request-section"><span className="gateway-section-label">SERVICIO SOLICITADO</span><strong>{gatewayPreview.service.name}</strong><p>{gatewayPreview.service.description || 'La aplicación ha solicitado identificarte para este servicio.'}</p></div>
                     <div className="gateway-request-section"><span className="gateway-section-label">REQUISITOS DE ACCESO</span><ul className="gateway-requirements">
                       <li><Check size={13} />Cuenta PlacetaID activa</li>
@@ -1441,14 +1443,22 @@ function App() {
                       {gatewayPreview.disclosure.unavailable.map((field) => <li key={field} className="gateway-unavailable-field"><X size={13} />{protectedFieldLabel(field)}<small>No disponible; no se enviará</small></li>)}
                     </ul><p className="gateway-data-footnote">No se comparten tu contraseña ni tus códigos de autenticación. Los datos protegidos requieren tu autorización expresa.</p></div>
                     <div className="gateway-request-section gateway-destination"><span className="gateway-section-label">DESTINO DE LA RESPUESTA</span><strong>{new URL(gatewayPreview.destination).host}</strong><code>{new URL(gatewayPreview.destination).pathname}</code><span>La respuesta de acceso volverá a esta dirección registrada.</span></div>
-                  </div>
+                    </div>
+                  </details>
                 </>}
           </section>}
           <div className="gateway-layout">
             <section className="gateway-flow-panel">
               <div className="gateway-wordmark-row"><h1 className="gateway-wordmark">PlacetaID</h1></div>
-              <p className="gateway-tagline">Una identidad, acceso seguro</p>
-              <div className="gateway-step-heading"><span className={`step-number ${gatewayStage !== 'entry' ? 'step-complete' : ''}`}>{gatewayStage === 'entry' ? '01' : <Check size={13} />}</span><div><h2>Identifica tu cuenta</h2><p>Introduce el DIP asociado a PlacetaID.</p></div></div>
+              <p className="gateway-tagline">{initialGatewayRequest.bound ? `Acceso seguro a ${gatewayPreview?.app.name || 'tu aplicación'}` : 'Una identidad, acceso seguro'}</p>
+              <ol className="gateway-progress" aria-label="Fases de autenticación">
+                {[
+                  { key: 'account', label: 'Cuenta', active: gatewayStage === 'entry', done: gatewayStage !== 'entry' },
+                  { key: 'verify', label: 'Verificación', active: gatewayStage === 'detected' || gatewayStage === 'password', done: gatewayStage === 'legal' || gatewayStage === 'consent' || gatewayStage === 'authenticated' },
+                  { key: 'review', label: 'Revisión', active: gatewayStage === 'legal' || gatewayStage === 'consent', done: gatewayStage === 'authenticated' },
+                ].map((step, index) => <li className={`${step.active ? 'is-current' : ''} ${step.done ? 'is-done' : ''}`} key={step.key}><span>{step.done ? <Check size={12} /> : index + 1}</span><small>{step.label}</small></li>)}
+              </ol>
+              <div className="gateway-step-heading"><span className={`step-number ${gatewayStage !== 'entry' ? 'step-complete' : ''}`}>{gatewayStage === 'entry' ? '01' : <Check size={13} />}</span><div><h2>{gatewayStage === 'entry' ? 'Identifica tu cuenta' : gatewayStage === 'detected' || gatewayStage === 'password' ? 'Confirma que eres tú' : gatewayStage === 'legal' || gatewayStage === 'consent' ? 'Revisa y autoriza' : 'Acceso confirmado'}</h2><p>{gatewayStage === 'entry' ? 'Introduce el DIP asociado a PlacetaID.' : gatewayStage === 'detected' ? 'Aprueba la solicitud con un método ya vinculado.' : gatewayStage === 'password' ? 'Introduce tu contraseña de PlacetaID para verificar la cuenta.' : gatewayStage === 'legal' ? 'Lee los documentos antes de continuar.' : gatewayStage === 'consent' ? 'Tú decides qué datos protegidos compartir.' : 'Has iniciado sesión de forma segura.'}</p></div></div>
               {gatewayStage === 'entry' && <form className="gateway-form" onSubmit={submitGatewayDip}>
                 <label className="field-label" htmlFor="gateway-dip">DIP</label>
                 <input id="gateway-dip" className="gateway-dip-input" value={gatewayDip} onChange={(event) => { setGatewayDip(event.target.value.toUpperCase()); setGatewayError(''); setGatewayNeedsEnrollment(false) }} placeholder="12345678Z" maxLength={11} autoComplete="username" required />
