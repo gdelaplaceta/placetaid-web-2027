@@ -1445,40 +1445,54 @@ button { min-height: 38px; }
   .public-shell .gateway-progress *, .public-shell .gateway-page .gateway-continue { transition: none; }
 }
 
-/* Keep the PlacetaID palette and display typography; only tighten the OAuth flow. */
-.public-shell { background: #2b0f54; color: #1c0836; }
-.public-main { background: #2b0f54; }
-.public-shell .gateway-page::before, .public-shell .gateway-page::after { display: block; }
-.public-shell .gateway-flow-panel { background: #efe8ff; color: #2b0f54; box-shadow: 7px 7px 0 #1c0836; }
-.public-shell .gateway-page .gateway-step-heading h2 { color: #1c0836; font-family: 'Baruta', 'Plus Jakarta Sans', sans-serif; font-size: 19px; font-weight: 900; letter-spacing: 0; }
-.public-shell .gateway-page .gateway-step-heading p { color: #6e5d85; }
-.public-shell .gateway-wordmark-row { display: flex; }
-.public-shell .gateway-tagline { display: block; }
-.public-shell .gateway-page .gateway-dip-input, .public-shell .gateway-page .gateway-password-input { border: 2px solid #6d28d9; border-radius: 10px; color: #2b0f54; }
-.public-shell .gateway-page .gateway-continue { border-color: #6d28d9; background: #6d28d9; }
-.public-shell .gateway-page .gateway-continue:hover { background: #4c1d95; }
-.public-shell .gateway-progress li > span { border-color: #cbb9e5; background: #f8f4ff; color: #6d28d9; }
-.public-shell .gateway-progress li:not(:last-child)::after { background: #d9cbed; }
-.public-shell .gateway-progress li small, .public-shell .gateway-progress li.is-current small { color: #6e5d85; }
-.public-shell .gateway-progress li.is-current > span { border-color: #6d28d9; background: #6d28d9; }
-.public-shell .gateway-progress li.is-done > span { border-color: #8b5cf6; background: #e7ddf8; color: #6d28d9; }
-.public-shell .gateway-request-card { border-color: #cfc0e2; border-radius: 13px; background: #fbf9ff; }
-.public-shell .gateway-request-heading { background: linear-gradient(120deg, #f7f1ff, #fff); }
-.public-shell .gateway-app-mark { border-color: #d8c9eb; background: #e8def7; color: #4c267b; }
+/* Keep the public OAuth flow compact and maintain readable contrast. */
+.public-shell { background: #f6f7f9; color: #1d2939; }
+.public-main { background: #f6f7f9; }
+.public-shell .gateway-page::before, .public-shell .gateway-page::after { display: none; }
+.public-shell .gateway-page-bound > .page-heading { display: none; }
+.public-shell .gateway-page > .page-heading h1 { color: #1c0836; }
+.public-shell .gateway-page > .page-heading p { color: #667085; }
+.public-shell .gateway-flow-panel { background: #fff; color: #1d2939; box-shadow: none; }
+.public-shell .gateway-layout { border-color: #dacbed; }
+.public-shell .gateway-flow-panel { border-color: #e4d9f0; }
+.public-shell .gateway-request-card { border: 1px solid #dacbed; border-top: 3px solid #6d28d9; border-radius: 16px; background: #fff; box-shadow: 0 12px 32px rgb(43 15 84 / 8%); }
+.public-shell .gateway-request-heading { background: linear-gradient(125deg, #f2ecff, #fff 78%); }
+.public-shell .gateway-app-mark { border-color: #dacbed; background: #f5f0ff; color: #4c1d95; }
 .public-shell .gateway-app-copy h2 { color: #241537; font-family: 'Baruta', 'Plus Jakarta Sans', sans-serif; font-weight: 900; }
-.public-shell .gateway-app-copy p { color: #746483; }
-.public-shell .gateway-verified-label { color: #5d4380; }
-.public-shell .gateway-request-badge { border-color: #dcd0e9; background: #fff; color: #664c84; }
-.public-shell .gateway-request-details { border-color: #e9e0f0; }
-.public-shell .gateway-request-details > summary { color: #5d4380; }
-.public-shell .gateway-request-grid, .public-shell .gateway-request-section { border-color: #eee7f3; }
-.public-shell .gateway-request-section > strong { color: #342047; }
-.public-shell .gateway-request-section > p, .public-shell .gateway-requirements li, .public-shell .gateway-disclosure-list li { color: #59466e; }
-.public-shell .gateway-data-footnote { color: #78668e; }
-.public-shell .gateway-progress li.is-done > span { color: #6d28d9; }
-.public-shell .gateway-privacy-footer { color: #ded5f2; }
-.public-footer { color: #d0c1e7; border-top-color: #68458d; }
-.public-shell .public-footer { max-width: 980px; min-height: 52px; margin: 0 auto; padding: 0 20px; border: 0; color: #d0c1e7; font-size: 10px; }
+.public-shell .gateway-verified-label { color: #4b3970; }
+.public-shell .gateway-request-badge { border-color: #dacbed; background: #f7f3ff; color: #4c1d95; }
+.public-shell .gateway-privacy-footer { color: #667085; }
+.public-shell .gateway-privacy-footer svg { color: #667085; }
+.public-shell .public-footer { background: #fff; color: #667085; }
+
+@media (min-width: 1001px) {
+  .public-shell .page-content.gateway-page.gateway-page-bound {
+    width: min(900px, 100%);
+    margin-inline: auto;
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr);
+    gap: 16px;
+  }
+  .public-shell .gateway-page-bound > .gateway-request-card {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    margin: 0;
+  }
+  .public-shell .gateway-page-bound > .gateway-layout {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 1000px) {
+  .public-shell .page-content.gateway-page.gateway-page-bound {
+    width: min(430px, 100%);
+    margin-inline: auto;
+  }
+  .public-shell .gateway-page-bound > .gateway-request-card,
+  .public-shell .gateway-page-bound > .gateway-layout { width: 100%; }
+}
 
 @media (max-width: 760px) {
   .public-shell .page-content.gateway-page.gateway-page-bound { margin-right: auto; margin-left: auto; }
