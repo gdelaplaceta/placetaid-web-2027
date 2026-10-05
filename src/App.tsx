@@ -390,6 +390,7 @@ function App() {
   const [gatewayStage, setGatewayStage] = useState<GatewayStage>('entry')
   const [gatewayUser, setGatewayUser] = useState<ManagedUser | null>(null)
   const [gatewayError, setGatewayError] = useState('')
+  const [gatewayIdentifyRetrySeconds, setGatewayIdentifyRetrySeconds] = useState(0)
   const [gatewayNeedsEnrollment, setGatewayNeedsEnrollment] = useState(false)
   const [gatewayOtp, setGatewayOtp] = useState('')
   const [gatewayPassword, setGatewayPassword] = useState('')
@@ -431,6 +432,11 @@ function App() {
       .catch(() => { if (active) setSupabaseStatus('offline') })
     return () => { active = false }
   }, [])
+  useEffect(() => {
+    if (gatewayIdentifyRetrySeconds <= 0) return
+    const timer = window.setTimeout(() => setGatewayIdentifyRetrySeconds((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [gatewayIdentifyRetrySeconds])
   useEffect(() => {
     if (!initialGatewayRequest.bound) return
     if (!initialGatewayRequest.valid) {
@@ -773,6 +779,10 @@ function App() {
       })
       const payload: GatewayResponse = await response.json()
       if (!response.ok) {
+        if (response.status === 429) {
+          const retryAfter = Number(response.headers.get('Retry-After'))
+          if (Number.isFinite(retryAfter) && retryAfter > 0) setGatewayIdentifyRetrySeconds(Math.ceil(retryAfter))
+        }
         if (payload.error === 'NO_ACTIVE_METHOD') {
           if (passwordLoginEnabled) {
             setGatewayPassword('')
@@ -1391,7 +1401,7 @@ function App() {
                   <p>Abre PlacetaID Móvil e inicia sesión con el DIP y la contraseña de tu cuenta PL26. Desde la app, vincula este dispositivo; después vuelve aquí para iniciar sesión.</p>
                   <a className="button-quiet" href="https://play.google.com/store/search?q=PlacetaID&c=apps" target="_blank" rel="noreferrer">Buscar PlacetaID en Google Play</a>
                 </div>}
-                <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || supabaseStatus !== 'ready' || (initialGatewayRequest.bound && (gatewayPreviewLoading || !gatewayPreview))}>{gatewayBusy ? 'Buscando identidad…' : 'Continuar'} <ArrowRight size={15} /></button>
+                <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || gatewayIdentifyRetrySeconds > 0 || supabaseStatus !== 'ready' || (initialGatewayRequest.bound && (gatewayPreviewLoading || !gatewayPreview))}>{gatewayBusy ? 'Buscando identidad…' : gatewayIdentifyRetrySeconds > 0 ? `Espera ${Math.floor(gatewayIdentifyRetrySeconds / 60)}:${String(gatewayIdentifyRetrySeconds % 60).padStart(2, '0')}` : 'Continuar'} <ArrowRight size={15} /></button>
               </form>}
               {gatewayStage === 'detected' && <div className="method-detection">
                 <div className="gateway-identified"><span className="user-avatar user-avatar-large"><Fingerprint size={20} /></span><div><strong>Cuenta localizada</strong><small>Datos personales ocultos hasta completar la autenticación</small></div><button className="text-action" onClick={() => { setGatewayStage('entry'); setGatewayRequestId(''); setGatewayConfirmationCode(''); setGatewayMethod(null); setGatewayError(''); setGatewayNeedsEnrollment(false) }}>Cambiar DIP</button></div>

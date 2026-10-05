@@ -33,6 +33,18 @@ const migrationTables = [
 ]
 
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false })
+const identifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    const resetAt = req.rateLimit?.resetTime?.getTime()
+    const retryAfter = resetAt ? Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)) : 600
+    res.setHeader('Retry-After', String(retryAfter))
+    fail(res, 429, 'IDENTIFY_RATE_LIMITED', `Se alcanzó el límite temporal de identificaciones. Desactiva el autoclicker y espera ${Math.ceil(retryAfter / 60)} minuto(s) antes de volver a intentarlo.`)
+  },
+})
 const deviceEnrollmentLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false })
 const deviceLifetimeMs = 365 * 24 * 60 * 60 * 1000
 const shareableConsentFields = ['dip', 'email', 'identityVerified']
@@ -758,7 +770,7 @@ api.post('/internal/devices/revoke', deviceEnrollmentLimiter, requireDeviceEnrol
   } catch (error) { handleDbError(res, error) }
 })
 
-api.post('/public/identify', authLimiter, async (req, res) => {
+api.post('/public/identify', identifyLimiter, async (req, res) => {
   const dip = normalizeDip(req.body?.dip)
   if (!isValidDip(dip)) return fail(res, 400, 'INVALID_DIP', 'Revisa el DIP: debe contener 8 números y una letra.')
   try {
