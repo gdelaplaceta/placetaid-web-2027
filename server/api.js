@@ -4,6 +4,16 @@ import bcrypt from 'bcryptjs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { supabase, supabaseReady } from './supabase.js'
 import { createRandomToken, encryptSecret, hashToken, isValidDip, normalizeDip, secureEquals, signSession, verifySession } from './security.js'
+import {
+  buildPasswordResetUrl,
+  createPasswordResetExpiry,
+  generateDip,
+  hashPasswordResetToken,
+  isValidEmail,
+  isValidPassword,
+  makePasswordResetToken,
+} from './password-reset.js'
+import { sendPasswordResetEmail } from './email.js'
 import { legacyApi } from './legacy/api.js'
 
 export const api = Router()
@@ -26,6 +36,7 @@ const migrationTables = [
   ['plid_v27_audit', 'event_type'],
   ['plid_v27_legacy_credentials', 'password_hash'],
   ['plid_v27_legacy_auth_requests', 'request_code'],
+  ['plid_v27_password_reset_links', 'token_hash'],
   ['rsp_votaciones', 'opciones'],
   ['rsp_registro_votos', 'votacion_id'],
   ['rsp_documentos', 'contenido'],
@@ -492,6 +503,51 @@ api.get('/admin/users', requireAdmin, async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+api.post('/admin/users/:id/password-reset-link', requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id)
+  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, 'INVALID_USER_ID', 'La identidad indicada no es válida.')
+  try {
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,dip,alias,nombre_real,email,estado,lista_negra')
+      .eq('id', userId)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user || Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) {
+      return fail(res, 404, 'USER_NOT_FOUND', 'No se encontró una identidad activa para crear el enlace.')
+    }
+
+    const name = String(user.alias || user.nombre_real || '').trim()
+    const surname = String(user.nombre_real || '').trim()
+    const finalInitial = name.split(/\s+/).at(-1)?.slice(0, 1) || surname.split(/\s+/).at(-1)?.slice(0, 1) || ''
+    const dip = generateDip(finalInitial)
+    const token = makePasswordResetToken()
+    const tokenHash = hashPasswordResetToken(token)
+    const expiresAt = createPasswordResetExpiry()
+    const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`
+    const url = buildPasswordResetUrl(baseUrl, token)
+    const { error: linkError } = await supabase.from('plid_v27_password_reset_links').insert({
+      user_id: user.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      delivered_to: 'administration',
+    })
+    if (linkError) throw linkError
+
+    const adminEmail = process.env.RESEND_ADMIN_RESET_EMAIL || process.env.RESEND_FROM_EMAIL
+    if (!adminEmail) return fail(res, 503, 'MAIL_NOT_CONFIGURED', 'Configura RESEND_ADMIN_RESET_EMAIL o RESEND_FROM_EMAIL para enviar el enlace.')
+    const result = await sendPasswordResetEmail({
+      to: adminEmail,
+      url,
+      dip,
+      userName: `${name} ${surname}`.trim(),
+      adminName: 'Administración de PlacetaID',
+    })
+    if (!result.sent) return fail(res, 502, result.reason, 'No se pudo enviar el enlace a Administración.')
+
+    res.status(201).json({ ok: true, dip, expiresAt, url, deliveredTo: adminEmail })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.patch('/admin/users/:id', requireAdmin, async (req, res) => {
   const statuses = new Set(['active', 'pending', 'restricted', 'suspended', 'closed'])
   if (req.body?.status && !statuses.has(req.body.status)) return fail(res, 400, 'INVALID_USER_STATUS', 'El estado de la identidad no es válido.')
@@ -505,62 +561,6 @@ api.patch('/admin/users/:id', requireAdmin, async (req, res) => {
     if (error) throw error
     await supabase.from('plid_v27_audit').insert({ target_user_id: Number(req.params.id), event_type: 'user_security_updated', details: { fields: Object.keys(req.body || {}) } })
     res.json(data)
-  } catch (error) { handleDbError(res, error) }
-})
-
-api.post('/admin/users/:id/password', authLimiter, requireAdmin, async (req, res) => {
-  const userId = Number(req.params.id)
-  const password = String(req.body?.password || '')
-  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, 'INVALID_USER_ID', 'La identidad indicada no es válida.')
-  if (password.length < 8 || password.length > 256 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-    return fail(res, 400, 'WEAK_PASSWORD', 'La contraseña debe tener entre 8 y 256 caracteres e incluir letras y números.')
-  }
-  try {
-    const { data: user, error: userError } = await supabase.from('solicitantes')
-      .select('id,dip')
-      .eq('id', userId)
-      .maybeSingle()
-    if (userError) throw userError
-    if (!user) return fail(res, 404, 'USER_NOT_FOUND', 'No se encontró la identidad.')
-
-    const passwordHash = await bcrypt.hash(password, 12)
-    let legacySynced
-    try {
-      legacySynced = await updateLegacyPasswordHash(user.dip, passwordHash)
-    } catch (error) {
-      console.error('[PlacetaID API] Could not update the legacy account password:', error.message)
-      return fail(res, 503, 'LEGACY_PASSWORD_UPDATE_UNAVAILABLE', 'No se pudo confirmar la sincronización con PL26. V27 no ha guardado la credencial; comprueba PL26 antes de dar la contraseña por cambiada.')
-    }
-
-    const { error: credentialError } = await supabase.from('plid_v27_legacy_credentials').upsert({
-      user_id: user.id,
-      password_hash: passwordHash,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' })
-    if (credentialError) {
-      console.error('[PlacetaID API] PL26 password changed, but the v27 credential could not be saved:', credentialError.message)
-      return fail(res, 503, 'LEGACY_PASSWORD_UPDATED_V27_SYNC_FAILED', 'La contraseña se actualizó en PL26, pero no pudo sincronizarse con PlacetaID v27. Repite el cambio desde Administración para completar la sincronización.')
-    }
-
-    const now = new Date().toISOString()
-    const [{ error: devicesError }, { error: sessionsError }] = await Promise.all([
-      supabase.from('plid_v27_devices').update({ active: false, revoked_at: now }).eq('user_id', user.id).eq('active', true).is('revoked_at', null),
-      supabase.from('plid_v27_sessions').update({ revoked_at: now }).eq('user_id', user.id).is('revoked_at', null),
-    ])
-    if (devicesError || sessionsError) {
-      console.error('[PlacetaID API] Password changed but session revocation failed:', devicesError?.message || sessionsError?.message)
-      return fail(res, 503, 'PASSWORD_UPDATED_REVOCATION_FAILED', 'La contraseña se actualizó, pero no se pudo confirmar la revocación de todas las sesiones. Revisa la seguridad de la cuenta.')
-    }
-    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
-      target_user_id: user.id,
-      event_type: 'admin_password_reset',
-      details: { legacySynced, sessionsRevoked: true },
-    })
-    if (auditError) {
-      console.error('[PlacetaID API] Password changed but the audit record could not be saved:', auditError.message)
-      return fail(res, 503, 'PASSWORD_UPDATED_AUDIT_FAILED', 'La contraseña y la revocación se completaron, pero no se pudo registrar la auditoría. Contacta con Administración.')
-    }
-    res.json({ ok: true, legacySynced, sessionsRevoked: true })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -755,7 +755,69 @@ api.post('/internal/authenticators/migrate', deviceEnrollmentLimiter, requireDev
       if (inserted?.length) {
         const { error: auditError } = await supabase.from('plid_v27_audit').insert({
           actor_user_id: user.id,
-          target_user_id: user.id,
+    get('/public/password-reset/validate', async (req, res) => {
+  const token = String(req.query.token || '').trim()
+  if (!token || token.length > 512) return fail(res, 400, 'INVALID_RESET_TOKEN', 'El enlace de cambio de contraseña no es válido.')
+  try {
+    const tokenHash = hashPasswordResetToken(token)
+    const { data: link, error } = await supabase.from('plid_v27_password_reset_links')
+      .select('user_id,expires_at,used_at,delivered_to')
+      .eq('token_hash', tokenHash)
+      .maybeSingle()
+    if (error) throw error
+    if (!link || link.used_at || Date.parse(link.expires_at) <= Date.now()) return fail(res, 410, 'RESET_LINK_EXPIRED', 'El enlace ya caducó o fue utilizado.')
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,dip,alias,nombre_real,email,estado,lista_negra')
+      .eq('id', link.user_id)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user || Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) {
+      return fail(res, 401, 'RESET_IDENTITY_UNAVAILABLE', 'La cuenta asociada al enlace no está disponible.')
+    }
+    res.json({ ok: true, user: { id: String(user.id), dip: user.dip, name: user.alias || String(user.nombre_real || '').split(/\s+/)[0], surname: user.alias ? user.nombre_real || '' : String(user.nombre_real || '').split(/\s+/).slice(1).join(' '), email: user.email }, expiresAt: link.expires_at })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.post('/public/password-reset', authLimiter, async (req, res) => {
+  const token = String(req.body?.token || '').trim()
+  const password = String(req.body?.password || '')
+  if (!token || !isValidPassword(password)) return fail(res, 400, 'INVALID_RESET_REQUEST', 'El enlace o la contraseña no son válidos.')
+  try {
+    const tokenHash = hashPasswordResetToken(token)
+    const { data: link, error: linkError } = await supabase.from('plid_v27_password_reset_links')
+      .select('id,user_id,expires_at,used_at')
+      .eq('token_hash', tokenHash)
+      .maybeSingle()
+    if (linkError) throw linkError
+    if (!link || link.used_at || Date.parse(link.expires_at) <= Date.now()) return fail(res, 410, 'RESET_LINK_EXPIRED', 'El enlace ya caducó o fue utilizado.')
+
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,dip,estado,lista_negra')
+      .eq('id', link.user_id)
+      .maybeSingle()
+    if (userError) throw userError
+    if (!user || Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) return fail(res, 401, 'RESET_IDENTITY_UNAVAILABLE', 'La cuenta no está disponible.')
+
+    const passwordHash = await bcrypt.hash(password, 12)
+    const now = new Date().toISOString()
+    const { error: credentialError } = await supabase.from('plid_v27_legacy_credentials').upsert({
+      user_id: user.id,
+      password_hash: passwordHash,
+      updated_at: now,
+    }, { onConflict: 'user_id' })
+    if (credentialError) throw credentialError
+    const [{ error: linkUpdateError }, { error: devicesError }, { error: sessionsError }, { error: auditError }] = await Promise.all([
+      supabase.from('plid_v27_password_reset_links').update({ used_at: now }).eq('id', link.id).eq('used_at', null),
+      supabase.from('plid_v27_devices').update({ active: false, revoked_at: now }).eq('user_id', user.id).eq('active', true).is('revoked_at', null),
+      supabase.from('plid_v27_sessions').update({ revoked_at: now }).eq('user_id', user.id).is('revoked_at', null),
+      supabase.from('plid_v27_audit').insert({ target_user_id: user.id, event_type: 'password_reset_link_used', details: { one_use: true, expires_at: link.expires_at } }),
+    ])
+    if (linkUpdateError || devicesError || sessionsError || auditError) throw new Error('No se pudo completar el cambio de contraseña')
+    res.json({ ok: true, message: 'La contraseña se ha actualizado. Las sesiones anteriores se revocaron.' })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.      target_user_id: user.id,
           event_type: 'legacy_authenticator_migrated',
           details: {},
         })

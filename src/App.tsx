@@ -39,7 +39,7 @@ import './App.css'
 type Role = 'administrador' | 'miembro' | 'entidad' | 'visitante'
 type IntegrationStatus = 'authorized' | 'disabled' | 'pending'
 type AgeLimit = 0 | 16 | 18
-type View = 'home' | 'applications' | 'users' | 'permissions' | 'gateway' | 'myPermissions' | 'simulator' | 'activity'
+type View = 'home' | 'applications' | 'users' | 'permissions' | 'gateway' | 'myPermissions' | 'simulator' | 'activity' | 'resetPassword'
 type ProtectedField = 'dip' | 'email' | 'phone' | 'photo' | 'identityVerified'
 type UserStatus = 'active' | 'pending' | 'restricted' | 'suspended' | 'closed'
 type ConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked'
@@ -229,6 +229,7 @@ function resolveGatewayRequest() {
 }
 
 const initialGatewayRequest = resolveGatewayRequest()
+const initialResetToken = new URLSearchParams(window.location.search).get('token') || ''
 
 function readStored<T>(key: string, fallback: T): T {
   try {
@@ -361,7 +362,7 @@ function App() {
   const [audit, setAudit] = useState(() => readStored('plid27.v27.audit', initialAudit))
   const [users, setUsers] = useState<ManagedUser[]>(initialUsers)
   const [selectedId, setSelectedId] = useState('banco')
-  const [view, setView] = useState<View>(initialGatewayRequest.bound ? 'gateway' : 'home')
+  const [view, setView] = useState<View>(() => initialResetToken ? 'resetPassword' : initialGatewayRequest.bound ? 'gateway' : 'home')
   const [query, setQuery] = useState('')
   const [userQuery, setUserQuery] = useState('')
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatus | 'all'>('all')
@@ -380,11 +381,12 @@ function App() {
   const [rotatingSecret, setRotatingSecret] = useState(false)
   const [rotateSecretError, setRotateSecretError] = useState('')
   const [rotatedCredential, setRotatedCredential] = useState<{ appName: string; clientId: string; clientSecret: string; auditWarning: boolean } | null>(null)
-  const [passwordResetTarget, setPasswordResetTarget] = useState<ManagedUser | null>(null)
-  const [adminPassword, setAdminPassword] = useState('')
-  const [adminPasswordConfirmation, setAdminPasswordConfirmation] = useState('')
-  const [adminPasswordError, setAdminPasswordError] = useState('')
-  const [adminPasswordSaving, setAdminPasswordSaving] = useState(false)
+  const [resetToken] = useState(initialResetToken)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordConfirmation, setResetPasswordConfirmation] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const [resetTarget, setResetTarget] = useState<{ dip: string; name: string; surname: string } | null>(null)
   const [planInfoOpen, setPlanInfoOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [simAppId, setSimAppId] = useState('joven')
@@ -489,6 +491,21 @@ function App() {
     return () => { active = false }
   }, [])
   useEffect(() => {
+    if (!initialResetToken) return
+    let active = true
+    setResetLoading(true)
+    setResetError('')
+    fetch(`/api/public/password-reset/validate?token=${encodeURIComponent(initialResetToken)}`)
+      .then(async (response) => {
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.message || 'El enlace no puede validarse.')
+        if (active) setResetTarget(payload.user)
+      })
+      .catch((error) => { if (active) setResetError(error instanceof Error ? error.message : 'No se pudo validar el enlace.') })
+      .finally(() => { if (active) setResetLoading(false) })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
     if (!['applications', 'users', 'permissions'].includes(view) || adminSyncing) return
     async function loadAdminCatalog() {
       let token = adminToken
@@ -542,7 +559,7 @@ function App() {
     return matchesQuery && (userStatusFilter === 'all' || user.status === userStatusFilter)
   })
   const pendingConsentCount = users.reduce((count, user) => count + user.permissions.filter((permission) => permission.status === 'pending').length, 0)
-  const isPublicView = view === 'home' || view === 'gateway' || view === 'myPermissions'
+  const isPublicView = view === 'home' || view === 'gateway' || view === 'myPermissions' || view === 'resetPassword'
 
   const simApp = integrations.find((item) => item.id === simAppId)
   const simService = simApp?.services.find((service) => service.id === simServiceId) ?? simApp?.services[0]
@@ -708,45 +725,52 @@ function App() {
     addAudit('Sesiones y dispositivos revocados', `${user.name} ${user.surname} · ${user.placeid}`)
   }
 
-  async function submitAdminPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!passwordResetTarget || !adminToken || !/^\d+$/.test(passwordResetTarget.id)) {
-      setAdminPasswordError('La sesión administrativa no está activa para esta identidad.')
+  async function createResetLink(user: ManagedUser) {
+    if (!adminToken || !/^\d+$/.test(user.id)) {
+      showToast('Inicia sesión en Administración para enviar el enlace.')
       return
     }
-    if (adminPassword.length < 8 || adminPassword.length > 256 || !/[A-Za-z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
-      setAdminPasswordError('Usa entre 8 y 256 caracteres, con al menos una letra y un número.')
-      return
-    }
-    if (adminPassword !== adminPasswordConfirmation) {
-      setAdminPasswordError('Las contraseñas no coinciden.')
-      return
-    }
-    setAdminPasswordSaving(true)
-    setAdminPasswordError('')
     try {
-      const response = await fetch(`/api/admin/users/${encodeURIComponent(passwordResetTarget.id)}/password`, {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}/password-reset-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({ password: adminPassword }),
       })
       const payload = await response.json()
-      if (!response.ok) {
-        setAdminPasswordError(payload.message || 'No se pudo actualizar la contraseña.')
-        return
-      }
-      updateUser(passwordResetTarget.id, (current) => ({ ...current, auth: { mobile: false, authenticator: false, desktop: false } }))
-      addAudit('Contraseña restablecida por Administración', `${passwordResetTarget.name} ${passwordResetTarget.surname} · ${passwordResetTarget.placeid}`)
-      showToast(payload.legacySynced
-        ? 'Contraseña actualizada en PlacetaID y PL26; sesiones revocadas.'
-        : 'Contraseña de PlacetaID actualizada; sesiones revocadas.')
-      setPasswordResetTarget(null)
-      setAdminPassword('')
-      setAdminPasswordConfirmation('')
-    } catch {
-      setAdminPasswordError('No se pudo conectar con PlacetaID. Comprueba la conexión e inténtalo de nuevo.')
+      if (!response.ok) throw new Error(payload.message || 'No se pudo enviar el enlace.')
+      addAudit('Enlace de cambio de contraseña enviado', `${user.name} ${user.surname} · ${user.placeid}`)
+      showToast(`Enlace enviado a Administración para ${user.name} ${user.surname}. Caducará en 48 horas.`)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo enviar el enlace.')
+    }
+  }
+
+  async function submitResetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!resetToken || !resetPassword || resetPassword !== resetPasswordConfirmation) {
+      setResetError('Introduce una contraseña y confirma que coincida.')
+      return
+    }
+    if (resetPassword.length < 8 || resetPassword.length > 256 || !/[A-Za-z]/.test(resetPassword) || !/[0-9]/.test(resetPassword)) {
+      setResetError('Usa entre 8 y 256 caracteres, con al menos una letra y un número.')
+      return
+    }
+    setResetLoading(true)
+    setResetError('')
+    try {
+      const response = await fetch('/api/public/password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password: resetPassword }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.message || 'No se pudo cambiar la contraseña.')
+      setResetTarget(null)
+      showToast('Contraseña cambiada. Las sesiones anteriores se revocaron.')
+      window.location.href = '/'
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : 'No se pudo cambiar la contraseña.')
     } finally {
-      setAdminPasswordSaving(false)
+      setResetLoading(false)
     }
   }
 
@@ -1272,6 +1296,8 @@ function App() {
           <div className={`prototype-banner system-banner-${supabaseStatus}`}><Sparkles size={15} /><span><strong>{supabaseStatus === 'ready' ? deviceBridgeConfigured ? 'PlacetaID v27 · conectado' : 'Supabase conectado · puente de dispositivos pendiente' : supabaseStatus === 'checking' ? 'Comprobando el servicio' : supabaseStatus === 'migration' ? 'Falta aplicar la migración' : 'PlacetaID no está conectado'}</strong><span>{supabaseStatus === 'ready' ? deviceBridgeConfigured ? 'Aplicaciones y autenticación usan Supabase; el puente seguro de dispositivos está configurado.' : 'Supabase está activo, pero falta configurar PLACETAID_V27_DEVICE_KEY en el servidor para sincronizar los dispositivos.' : supabaseStatus === 'migration' ? 'Aplica la migración v27 antes de usar el catálogo.' : supabaseStatus === 'offline' ? 'Comprueba el servidor API y las credenciales de Supabase.' : 'Verificando API y tablas de Supabase…'}</span></span><button onClick={() => fetch('/api/health').then((response) => response.json()).then((health) => { setSupabaseStatus(health.ok ? 'ready' : health.migrationRequired ? 'migration' : 'offline'); setDeviceBridgeConfigured(health.deviceBridgeConfigured === true); showToast(health.ok ? 'Conexión Supabase verificada' : 'Supabase necesita atención') }).catch(() => { setSupabaseStatus('offline'); showToast('No se pudo contactar con la API') })}>Comprobar <ArrowRight size={14} /></button></div>
         </>}
 
+        {view === 'resetPassword' && <div className="public-reset-page"><section className="reset-card"><div className="reset-card-icon"><KeyRound size={25} /></div><span className="public-kicker">CAMBIO DE CONTRASEÑA</span><h1>Tu acceso seguro</h1><p>El enlace fue creado para cambiar la contraseña de tu cuenta desde la web. No se requiere abrir ni ejecutar la aplicación.</p>{resetLoading && <div className="reset-status"><span />Validando enlace…</div>}{resetError && <p className="gateway-error" role="alert">{resetError}</p>}{resetTarget ? <form className="reset-form" onSubmit={submitResetPassword}><div className="reset-target"><span>{resetTarget.dip}</span><strong>{resetTarget.name} {resetTarget.surname}</strong></div><label className="field-label" htmlFor="reset-password">Nueva contraseña</label><input className="modal-input" id="reset-password" type="password" autoComplete="new-password" minLength={8} maxLength={256} value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} required /><small className="field-help">Entre 8 y 256 caracteres, con al menos una letra y un número.</small><label className="field-label" htmlFor="reset-password-confirm">Confirmar contraseña</label><input className="modal-input" id="reset-password-confirm" type="password" autoComplete="new-password" maxLength={256} value={resetPasswordConfirmation} onChange={(event) => setResetPasswordConfirmation(event.target.value)} required /><button className="button-primary" type="submit" disabled={resetLoading}>{resetLoading ? 'Cambiando…' : 'Cambiar contraseña'}</button></form> : !resetLoading && <div className="reset-status reset-error"><ShieldAlert size={16} />El enlace no está válido, caducó o fue utilizado.</div>}<button className="text-action" onClick={() => setView('home')}>Volver a PlacetaID <ArrowRight size={13} /></button></section></div>}
+
         {view === 'home' && <div className="public-home">
           <section className="public-home-hero">
             <div className="public-home-copy"><span className="public-kicker">IDENTIDAD DIGITAL · PLAN 2027</span><h1>Tu identidad.<br /><em>Tu decisión.</em></h1><p>PlacetaID permite entrar en los servicios de La Placeta sin compartir más datos de los necesarios.</p><div className="public-home-actions"><span className="home-access-note"><LockKeyhole size={16} /> El acceso se inicia desde una aplicación autorizada mediante <code>client_id</code>.</span></div></div>
@@ -1387,9 +1413,7 @@ function App() {
 
             {selectedUser && <section className="user-detail-panel">
               <div className="user-profile-heading"><span className="user-avatar user-avatar-large">{selectedUser.name.slice(0, 1)}{selectedUser.surname.slice(0, 1)}</span><div className="user-profile-name"><div className="eyebrow">FICHA DE USUARIO</div><h2>{selectedUser.name} {selectedUser.surname}</h2><span>{selectedUser.placeid} <span className="separator-dot">·</span> {calculateAge(selectedUser.birthDate)} años</span></div><label className={`user-status-select user-status-${selectedUser.status}`}><select aria-label="Estado de la cuenta" value={selectedUser.status} onChange={(event) => { const status = event.target.value as UserStatus; updateUser(selectedUser.id, (current) => ({ ...current, status })); addAudit(`Estado de identidad cambiado a ${userStatusLabel(status)}`, `${selectedUser.name} ${selectedUser.surname}`) }}>{(['active', 'pending', 'restricted', 'suspended', 'closed'] as UserStatus[]).map((status) => <option value={status} key={status}>{userStatusLabel(status)}</option>)}</select><ChevronDown size={12} /></label></div>
-              <div className="user-password-action-row"><div><strong>Credenciales de acceso</strong><small>Restablece la contraseña y revoca las sesiones y dispositivos activos.</small></div><button className="button-primary" disabled={!adminToken || !/^\d+$/.test(selectedUser.id)} title={!adminToken ? 'Inicia sesión en Administración para continuar.' : !/^\d+$/.test(selectedUser.id) ? 'Esta ficha no corresponde a una identidad real de Supabase.' : undefined} onClick={() => { setPasswordResetTarget(selectedUser); setAdminPassword(''); setAdminPasswordConfirmation(''); setAdminPasswordError('') }}><KeyRound size={14} />Cambiar contraseña</button>{(!adminToken || !/^\d+$/.test(selectedUser.id)) && <small className="user-password-action-note">{!adminToken ? 'Inicia sesión en Administración para habilitar esta acción.' : 'Disponible solo para identidades reales cargadas desde Supabase.'}</small>}</div>
-
-              <section className="user-detail-section"><div className="user-section-heading"><div><h3>Identidad</h3><p>Datos de referencia de la cuenta</p></div><BadgeCheck size={16} /></div><div className="identity-facts"><div><span>PLACETAID</span><strong>{selectedUser.placeid}</strong></div><div><span>DIP</span><strong>{selectedUser.dip}</strong></div><div><span>NOMBRE COMPLETO</span><strong>{selectedUser.name} {selectedUser.surname}</strong></div><div><span>FECHA DE NACIMIENTO</span><strong>{selectedUser.birthDate}</strong></div><div><span>CORREO REGISTRADO</span><strong>{selectedUser.email}</strong></div><div><span>TELÉFONO REGISTRADO</span><strong>{selectedUser.phone}</strong></div><div><span>ÚLTIMO ACCESO</span><strong>{selectedUser.lastAccess}</strong></div><div><span>VERIFICACIÓN</span><strong className={selectedUser.identityVerified ? 'verified-text' : 'unverified-text'}>{selectedUser.identityVerified ? 'Identidad verificada' : 'Pendiente de verificar'}</strong></div></div></section>
+              <div className="user-password-action-row"><div><strong>Credenciales de acceso</strong><small>Genera un enlace seguro para que la cuenta cambie la contraseña desde la web. No se ejecuta desde una aplicación.</small></div><button className="button-primary" disabled={!adminToken || !/^\d+$/.test(selectedUser.id)} title={!adminToken ? 'Inicia sesión en Administración para continuar.' : !/^\d+$/.test(selectedUser.id) ? 'Esta ficha no corresponde a una identidad real de Supabase.' : undefined} onClick={() => void createResetLink(selectedUser)}><Mail size={14} />Enviar enlace web</button>{(!adminToken || !/^\d+$/.test(selectedUser.id)) && <small className="user-password-action-note">{!adminToken ? 'Inicia sesión en Administración para habilitar esta acción.' : 'Disponible solo para identidades reales cargadas desde Supabase.'}</small>}</div>              <section className="user-detail-section"><div className="user-section-heading"><div><h3>Identidad</h3><p>Datos de referencia de la cuenta</p></div><BadgeCheck size={16} /></div><div className="identity-facts"><div><span>PLACETAID</span><strong>{selectedUser.placeid}</strong></div><div><span>DIP</span><strong>{selectedUser.dip}</strong></div><div><span>NOMBRE COMPLETO</span><strong>{selectedUser.name} {selectedUser.surname}</strong></div><div><span>FECHA DE NACIMIENTO</span><strong>{selectedUser.birthDate}</strong></div><div><span>CORREO REGISTRADO</span><strong>{selectedUser.email}</strong></div><div><span>TELÉFONO REGISTRADO</span><strong>{selectedUser.phone}</strong></div><div><span>ÚLTIMO ACCESO</span><strong>{selectedUser.lastAccess}</strong></div><div><span>VERIFICACIÓN</span><strong className={selectedUser.identityVerified ? 'verified-text' : 'unverified-text'}>{selectedUser.identityVerified ? 'Identidad verificada' : 'Pendiente de verificar'}</strong></div></div></section>
 
               <section className="user-detail-section"><div className="user-section-heading"><div><h3>Métodos de autenticación</h3><p>La pasarela usa la primera sesión disponible</p></div><KeyRound size={16} /></div><div className="auth-methods-row">{[{ key: 'mobile', label: 'PlacetaID móvil', icon: <Smartphone size={16} /> }, { key: 'authenticator', label: 'Autentificador', icon: <KeyRound size={16} /> }, { key: 'desktop', label: 'PlacetaID Desktop', icon: <Monitor size={16} /> }].map((method) => <div className={`auth-method-chip ${selectedUser.auth[method.key as keyof ManagedUser['auth']] ? 'auth-method-active' : ''}`} key={method.key}>{method.icon}<span>{method.label}</span><i /></div>)}</div><div className="auth-priority-note"><Fingerprint size={13} />Prioridad detectada: <strong>{authMethod(selectedUser) === 'mobile' ? 'PlacetaID móvil' : authMethod(selectedUser) === 'authenticator' ? 'Autentificador' : authMethod(selectedUser) === 'desktop' ? 'PlacetaID Desktop' : 'sin sesión disponible'}</strong></div></section>
 
@@ -1566,7 +1590,6 @@ function App() {
       {secretRotateTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !rotatingSecret) setSecretRotateTarget(null) }}><section className="integration-modal" role="dialog" aria-modal="true" aria-labelledby="rotate-secret-title"><div className="modal-topline"><span className="modal-icon"><KeyRound size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" disabled={rotatingSecret} onClick={() => setSecretRotateTarget(null)}><X size={17} /></button></div><h2 id="rotate-secret-title">Regenerar secreto</h2><p>Se creará una clave nueva para <strong>{secretRotateTarget.name}</strong>. El secreto actual dejará de funcionar inmediatamente; tendrás que actualizarlo en el servidor de la aplicación.</p>{rotateSecretError && <p className="gateway-error" role="alert">{rotateSecretError}</p>}<div className="modal-actions"><button className="button-quiet" type="button" disabled={rotatingSecret} onClick={() => setSecretRotateTarget(null)}>Cancelar</button><button className="button-primary" type="button" disabled={rotatingSecret || !adminToken} onClick={() => void rotateApplicationSecret()}><KeyRound size={14} />{rotatingSecret ? 'Regenerando…' : 'Regenerar secreto'}</button></div></section></div>}
       {rotatedCredential && <div className="modal-backdrop" role="presentation"><section className="integration-modal" role="dialog" aria-modal="true" aria-labelledby="rotated-secret-title"><div className="modal-topline"><span className="modal-icon"><KeyRound size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar y borrar el secreto de la pantalla" onClick={() => setRotatedCredential(null)}><X size={17} /></button></div><h2 id="rotated-secret-title">Secreto nuevo generado</h2><p>Guárdalo ahora en las variables de entorno del servidor de <strong>{rotatedCredential.appName}</strong>. PlacetaID no podrá volver a mostrarlo.</p><div className="created-credentials"><label className="field-label" htmlFor="rotated-client-id">Client ID</label><div className="credential-value"><code id="rotated-client-id">{rotatedCredential.clientId}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(rotatedCredential.clientId)}>Copiar</button></div><label className="field-label" htmlFor="rotated-client-secret">Client secret · una sola vez</label><div className="credential-value"><code id="rotated-client-secret">{rotatedCredential.clientSecret}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(rotatedCredential.clientSecret)}>Copiar</button></div><div className="modal-info"><ShieldAlert size={15} /><span>Guarda este secreto como <code>PLACETAID_CLIENT_SECRET</code> en el backend. No lo pongas en código del navegador, repositorios ni URLs.</span></div>{rotatedCredential.auditWarning && <p className="gateway-error" role="alert">El secreto se regeneró, pero no se pudo guardar el evento de auditoría. Guarda el valor nuevo ahora.</p>}<div className="modal-actions"><button className="button-primary" type="button" onClick={() => setRotatedCredential(null)}>He guardado el secreto</button></div></div></section></div>}
       {consentPrompt && <div className="modal-backdrop consent-modal-backdrop" role="presentation"><section className="consent-modal" role="dialog" aria-modal="true" aria-labelledby="consent-modal-title"><div className="consent-modal-top"><span className="consent-modal-icon"><LockKeyhole size={18} /></span><button className="icon-button" aria-label="Cerrar solicitud" onClick={() => setConsentPrompt(null)}><X size={16} /></button></div><div className="eyebrow"><span className="eyebrow-line" />SOLICITUD DE DATO PROTEGIDO</div><h2 id="consent-modal-title">{integrations.find((app) => app.id === consentPrompt.appId)?.name ?? 'Esta aplicación'} quiere acceder a {protectedFieldLabel(consentPrompt.field).toLowerCase()}.</h2><p>Esta aplicación solicita permiso para utilizar este dato asociado a tu PlacetaID. La autorización solo se aplica a esta aplicación y puedes revocarla después.</p><div className="consent-modal-data"><span>{protectedFieldLabel(consentPrompt.field)}</span><span>Tu permiso, siempre revocable</span></div><div className="modal-actions"><button className="button-quiet" onClick={() => resolveConsentPrompt('denied')}>No permitir</button><button className="button-primary" onClick={() => resolveConsentPrompt('granted')}><Check size={14} />Permitir</button></div></section></div>}
-      {passwordResetTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !adminPasswordSaving) setPasswordResetTarget(null) }}><form className="integration-modal admin-password-modal" onSubmit={submitAdminPassword}><div className="modal-topline"><span className="modal-icon"><KeyRound size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" disabled={adminPasswordSaving} onClick={() => setPasswordResetTarget(null)}><X size={17} /></button></div><h2>Cambiar contraseña</h2><p>Se actualizará la credencial de <strong>{passwordResetTarget.name} {passwordResetTarget.surname}</strong> en PlacetaID y, si existe, también en PL26. Las sesiones y los dispositivos activos se revocarán.</p><label className="field-label" htmlFor="admin-new-password">Nueva contraseña</label><input className="modal-input" id="admin-new-password" type="password" autoComplete="new-password" minLength={8} maxLength={256} value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} required /><small className="field-help">Entre 8 y 256 caracteres, con al menos una letra y un número.</small><label className="field-label" htmlFor="admin-confirm-password">Confirmar contraseña</label><input className="modal-input" id="admin-confirm-password" type="password" autoComplete="new-password" maxLength={256} value={adminPasswordConfirmation} onChange={(event) => setAdminPasswordConfirmation(event.target.value)} required />{adminPasswordError && <p className="gateway-error" role="alert">{adminPasswordError}</p>}<div className="modal-actions"><button className="button-quiet" type="button" disabled={adminPasswordSaving} onClick={() => setPasswordResetTarget(null)}>Cancelar</button><button className="button-primary" type="submit" disabled={adminPasswordSaving || !adminToken}>{adminPasswordSaving ? 'Actualizando…' : 'Actualizar contraseña'}</button></div></form></div>}
       {legalDocument && <div className="modal-backdrop legal-document-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLegalDocument(null) }}><section className="legal-document-modal" role="dialog" aria-modal="true" aria-labelledby="legal-document-title"><div className="consent-modal-top"><span className="consent-modal-icon">{legalDocument === 'terms' ? <ShieldCheck size={18} /> : <LockKeyhole size={18} />}</span><button className="icon-button" aria-label="Cerrar documento" onClick={() => setLegalDocument(null)}><X size={16} /></button></div><span className="eyebrow">PLACETAID v27 · {LEGAL_VERSION}</span><h2 id="legal-document-title">{legalDocument === 'terms' ? 'Términos y condiciones' : 'Política de privacidad'}</h2>{legalDocument === 'terms' ? <div className="legal-document-copy"><h3>Servicio y autenticación</h3><p>PlacetaID localiza la cuenta con el DIP y confirma la identidad mediante un método de autenticación previamente vinculado. El DIP por sí solo no permite iniciar sesión. El acceso a cada aplicación depende de sus reglas, del estado de la cuenta y de la aprobación del titular.</p><h3>Información compartida</h3><p>Antes de confirmar una solicitud, PlacetaID identifica la aplicación y el servicio solicitante e informa de los datos que se transmitirán. Se incluyen el resultado de autenticación, indicadores de edad y nombre y apellidos. Los datos protegidos solo se transmiten cuando la aplicación está autorizada y el titular presta consentimiento específico. Las contraseñas, códigos temporales y tokens de dispositivo no se entregan a la aplicación solicitante.</p><h3>Uso responsable y seguridad</h3><p>El titular debe mantener bajo su control sus dispositivos y códigos de autenticación y comunicar cualquier pérdida. No debe compartir códigos ni intentar acceder a cuentas ajenas. PlacetaID puede suspender temporalmente una cuenta o integración ante riesgos de seguridad o incumplimientos; las decisiones de acceso y seguridad pueden registrarse para prevenir fraude y resolver incidencias.</p><h3>Permisos y finalización</h3><p>El titular puede rechazar una solicitud de acceso y revisar o revocar los permisos de datos protegidos desde «Mis permisos». La revocación evita que se incluyan esos datos en nuevas respuestas de PlacetaID; no elimina copias que la aplicación receptora ya hubiera obtenido, por lo que las solicitudes de supresión de esas copias deben dirigirse también a dicha aplicación.</p></div> : <div className="legal-document-copy"><h3>Responsable y finalidad</h3><p>Responsable: Grupo de La Placeta. PlacetaID trata los datos de identidad para localizar la cuenta solicitada, autenticar al titular, calcular los indicadores de edad necesarios y aplicar las reglas de acceso de la aplicación y el servicio identificados en pantalla.</p><h3>Datos tratados y destinatarios</h3><p>Se utilizan el DIP para localizar la cuenta, los datos necesarios para verificar el método de autenticación, el nombre y apellidos y los indicadores «mayor de 16» y «mayor de 18». La aplicación y el servicio indicados en cada solicitud reciben la respuesta de autenticación y esos datos básicos. El DIP, correo electrónico y estado de identidad verificada son datos protegidos: solo se envían si la aplicación está autorizada para solicitarlos y el titular los permite expresamente. El teléfono y la fotografía no se comparten en este flujo. Las contraseñas, códigos temporales y tokens de dispositivo no se entregan a la aplicación solicitante.</p><h3>Base, conservación y seguridad</h3><p>La autenticación se realiza para atender la solicitud iniciada por el titular y aplicar los controles de seguridad de la cuenta. El consentimiento es la base para compartir cada dato protegido. Los registros de autenticación y seguridad se conservan mientras sean necesarios para proteger el servicio, investigar incidencias y cumplir obligaciones aplicables; los permisos se mantienen hasta su revocación o el cierre de la cuenta. Se aplican controles de acceso, cifrado de secretos de autenticación y auditoría de operaciones sensibles.</p><h3>Derechos y contacto</h3><p>Puedes solicitar acceso, rectificación, supresión, limitación u oposición al tratamiento, y retirar un consentimiento desde «Mis permisos» sin afectar a los tratamientos anteriores. Para ejercer otros derechos, contacta con Administración de La Placeta a través de sus canales oficiales. También puedes reclamar ante la autoridad de protección de datos competente. La revocación en PlacetaID no borra los datos que la aplicación receptora ya haya recibido; solicita su supresión directamente a esa aplicación.</p></div>}<button className="button-primary legal-document-close" onClick={() => setLegalDocument(null)}>Cerrar documento</button></section></div>}
       {isPublicView && view !== 'gateway' && <button className="floating-plan-button" aria-haspopup="dialog" onClick={() => setPlanInfoOpen(true)}><span className="floating-plan-number">25</span><span><small>PLAN 2027</small><strong>Transformación digital</strong></span><ArrowRight size={15} /></button>}
       {planInfoOpen && <div className="plan-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlanInfoOpen(false) }}><section className="plan-dialog" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title"><div className="plan-dialog-top"><span>PLAN 2027 <i>·</i> ÁMBITO 25</span><button className="icon-button" aria-label="Cerrar detalle del Plan 2027" onClick={() => setPlanInfoOpen(false)}><X size={16} /></button></div><h2 id="plan-dialog-title">Fomento de la transformación digital</h2><p>Impulso de la modernización tecnológica de organizaciones, proyectos y servicios.</p><div className="plan-transition"><span>PlacetaID v27</span><strong>En transición desde 2026</strong></div><button className="button-primary" onClick={() => setPlanInfoOpen(false)}>Cerrar</button></section></div>}
