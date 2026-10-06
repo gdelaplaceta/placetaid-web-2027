@@ -755,7 +755,18 @@ api.post('/internal/authenticators/migrate', deviceEnrollmentLimiter, requireDev
       if (inserted?.length) {
         const { error: auditError } = await supabase.from('plid_v27_audit').insert({
           actor_user_id: user.id,
-    get('/public/password-reset/validate', async (req, res) => {
+          target_user_id: user.id,
+          event_type: 'legacy_authenticator_migrated',
+          details: {},
+        })
+        if (auditError) throw auditError
+      }
+    }
+    res.json({ ok: true, processed: entries.length, migrated, skippedInactive, skippedExisting })
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.get('/public/password-reset/validate', async (req, res) => {
   const token = String(req.query.token || '').trim()
   if (!token || token.length > 512) return fail(res, 400, 'INVALID_RESET_TOKEN', 'El enlace de cambio de contraseña no es válido.')
   try {
@@ -814,17 +825,6 @@ api.post('/public/password-reset', authLimiter, async (req, res) => {
     ])
     if (linkUpdateError || devicesError || sessionsError || auditError) throw new Error('No se pudo completar el cambio de contraseña')
     res.json({ ok: true, message: 'La contraseña se ha actualizado. Las sesiones anteriores se revocaron.' })
-  } catch (error) { handleDbError(res, error) }
-})
-
-api.      target_user_id: user.id,
-          event_type: 'legacy_authenticator_migrated',
-          details: {},
-        })
-        if (auditError) throw auditError
-      }
-    }
-    res.json({ ok: true, processed: entries.length, migrated, skippedInactive, skippedExisting })
   } catch (error) { handleDbError(res, error) }
 })
 
