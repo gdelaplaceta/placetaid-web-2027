@@ -19,6 +19,7 @@ import {
   KeyRound,
   LockKeyhole,
   Mail,
+  MessageCircle,
   Monitor,
   Phone,
   Plus,
@@ -387,6 +388,7 @@ function App() {
   const [resetLoading, setResetLoading] = useState(false)
   const [resetError, setResetError] = useState('')
   const [resetTarget, setResetTarget] = useState<{ dip: string; name: string; surname: string } | null>(null)
+  const [resetLinkShare, setResetLinkShare] = useState<{ name: string; email: string; url: string; message: string; expiresAt: string } | null>(null)
   const [planInfoOpen, setPlanInfoOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [simAppId, setSimAppId] = useState('joven')
@@ -736,11 +738,13 @@ function App() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       })
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload.message || 'No se pudo enviar el enlace.')
-      addAudit('Enlace de cambio de contraseña enviado', `${user.name} ${user.surname} · ${user.placeid}`)
-      showToast(`Enlace enviado a Administración para ${user.name} ${user.surname}. Caducará en 48 horas.`)
+      if (!response.ok) throw new Error(payload.message || 'No se pudo generar el enlace.')
+      const name = `${user.name} ${user.surname}`.trim()
+      const message = `Hola ${name},\n\nPuedes cambiar la contraseña de tu cuenta de PlacetaID desde este enlace:\n${payload.url}\n\nEl enlace es de un solo uso y caduca en 48 horas. Si no solicitaste este cambio, ignora este mensaje.`
+      setResetLinkShare({ name, email: user.email, url: payload.url, expiresAt: payload.expiresAt, message })
+      addAudit('Enlace de cambio de contraseña generado para compartir', `${name} · ${user.placeid}`)
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No se pudo enviar el enlace.')
+      showToast(error instanceof Error ? error.message : 'No se pudo generar el enlace.')
     }
   }
 
@@ -1585,6 +1589,24 @@ function App() {
 
         {isPublicView ? <footer className="public-footer"><span>PlacetaID v27.0 <i>·</i> Plan 2027 · Ámbito 25</span><span>Identidad digital segura</span></footer> : <footer className="app-footer"><span><span className="footer-mark"><Fingerprint size={13} /></span>PlacetaID v27.0 <span className="footer-dot">·</span> Gobierno de identidad</span><span>Panel de Administración <span className="footer-dot">·</span> Vista previa</span></footer>}
       </main>
+
+      {resetLinkShare && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetLinkShare(null) }}>
+        <section className="integration-modal reset-share-modal" role="dialog" aria-modal="true" aria-labelledby="reset-share-title">
+          <div className="modal-topline"><span className="modal-icon"><KeyRound size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar enlace de restablecimiento" onClick={() => setResetLinkShare(null)}><X size={17} /></button></div>
+          <h2 id="reset-share-title">Enlace listo para compartir</h2>
+          <p>El enlace no se ha enviado. Copia el mensaje o ábrelo en WhatsApp o en el correo para enviarlo manualmente a <strong>{resetLinkShare.name}</strong>.</p>
+          <label className="field-label" htmlFor="reset-share-message">Mensaje con enlace · caduca {new Date(resetLinkShare.expiresAt).toLocaleString('es-ES')}</label>
+          <textarea className="reset-share-message" id="reset-share-message" readOnly value={resetLinkShare.message} />
+          <div className="reset-share-actions">
+            <button className="button-primary" type="button" onClick={() => void copyCredential(resetLinkShare.message)}><ClipboardCheck size={14} />Copiar mensaje</button>
+            <button className="button-quiet" type="button" onClick={() => void copyCredential(resetLinkShare.url)}><KeyRound size={14} />Copiar enlace</button>
+            <a className="button-quiet" href={`https://wa.me/?${new URLSearchParams({ text: resetLinkShare.message }).toString()}`} target="_blank" rel="noreferrer"><MessageCircle size={14} />WhatsApp</a>
+            <a className="button-quiet" href={`mailto:${encodeURIComponent(resetLinkShare.email)}?${new URLSearchParams({ subject: 'Cambio de contraseña de PlacetaID', body: resetLinkShare.message }).toString()}`}><Mail size={14} />Correo</a>
+          </div>
+          <div className="modal-info"><ShieldAlert size={15} /><span>El envío solo ocurre si Administración confirma el mensaje desde WhatsApp o su aplicación de correo. El enlace es de un solo uso.</span></div>
+          <div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setResetLinkShare(null)}>Cerrar</button></div>
+        </section>
+      </div>}
 
       {newAppOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingApp) setNewAppOpen(false) }}><form className="integration-modal" onSubmit={addIntegration}><div className="modal-topline"><span className="modal-icon"><Plus size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" onClick={() => setNewAppOpen(false)}><X size={17} /></button></div><h2>{newAppCredential ? 'Aplicación registrada' : 'Nueva integración'}</h2><p>{newAppCredential ? 'Las credenciales se muestran ahora una sola vez. Guárdalas en el backend seguro de tu aplicación.' : 'La solicitud se guardará en Supabase y recibirá un client_id real.'}</p>{newAppCredential ? <div className="created-credentials"><label className="field-label" htmlFor="created-client-id">Client ID</label><div className="credential-value"><code id="created-client-id">{newAppCredential.clientId}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientId)}>Copiar</button></div><label className="field-label" htmlFor="created-client-secret">Client secret · una sola vez</label><div className="credential-value"><code id="created-client-secret">{newAppCredential.clientSecret}</code><button type="button" className="button-quiet" onClick={() => void copyCredential(newAppCredential.clientSecret)}>Copiar</button></div>{newAppError && <p className="gateway-error" role="alert">{newAppError} Puedes cargar el logo desde la ficha de la aplicación.</p>}<div className="modal-info"><ShieldAlert size={15} /><span>No lo incluyas en JavaScript del navegador, repositorios ni URLs. Guárdalo como secreto del servidor. El acceso seguirá pendiente hasta que Administración lo autorice.</span></div><div className="modal-actions"><button className="button-primary" type="button" onClick={() => { setNewAppOpen(false); setNewAppCredential(null); setNewAppName(''); setNewAppDescription(''); setNewAppRedirectUri(''); setNewAppLogo(null); setNewAppError('') }}>He guardado las credenciales</button></div></div> : <><label className="field-label" htmlFor="new-app-name">Nombre de la aplicación</label><input className="modal-input" id="new-app-name" autoFocus maxLength={100} value={newAppName} onChange={(event) => setNewAppName(event.target.value)} placeholder="Ej. Portal de servicios" required /><label className="field-label" htmlFor="new-app-category">Categoría</label><input className="modal-input" id="new-app-category" maxLength={80} value={newAppCategory} onChange={(event) => setNewAppCategory(event.target.value)} placeholder="Ecosistema" /><label className="field-label" htmlFor="new-app-description">Descripción</label><input className="modal-input" id="new-app-description" maxLength={500} value={newAppDescription} onChange={(event) => setNewAppDescription(event.target.value)} placeholder="Qué ofrece esta aplicación" /><label className="app-logo-upload"><span>{newAppLogo ? <ImageIcon size={18} /> : <Plus size={18} />}</span><span><strong>{newAppLogo ? newAppLogo.name : 'Añadir logo de la aplicación'}</strong><small>PNG, JPEG o WebP · máximo 1 MB</small></span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { setNewAppLogo(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} /></label><label className="field-label" htmlFor="new-app-redirect">Redirect URI</label><input className="modal-input" id="new-app-redirect" type="url" value={newAppRedirectUri} onChange={(event) => setNewAppRedirectUri(event.target.value)} placeholder="https://app.ejemplo.org/placetaid/callback" required /><small className="field-help">Debe coincidir exactamente con el callback de tu aplicación. HTTPS obligatorio, salvo localhost en desarrollo.</small>{newAppError && <p className="gateway-error" role="alert">{newAppError}</p>}<div className="modal-info"><ShieldAlert size={15} /><span>Se crea un servicio general y la integración queda pendiente; solo podrá iniciar login después de autorizarla en el catálogo.</span></div><div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setNewAppOpen(false)} disabled={creatingApp}>Cancelar</button><button className="button-primary" type="submit" disabled={creatingApp || !adminToken}><Plus size={15} />{creatingApp ? 'Creando en Supabase…' : 'Crear aplicación'}</button></div></>}</form></div>}
       {secretRotateTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !rotatingSecret) setSecretRotateTarget(null) }}><section className="integration-modal" role="dialog" aria-modal="true" aria-labelledby="rotate-secret-title"><div className="modal-topline"><span className="modal-icon"><KeyRound size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar" disabled={rotatingSecret} onClick={() => setSecretRotateTarget(null)}><X size={17} /></button></div><h2 id="rotate-secret-title">Regenerar secreto</h2><p>Se creará una clave nueva para <strong>{secretRotateTarget.name}</strong>. El secreto actual dejará de funcionar inmediatamente; tendrás que actualizarlo en el servidor de la aplicación.</p>{rotateSecretError && <p className="gateway-error" role="alert">{rotateSecretError}</p>}<div className="modal-actions"><button className="button-quiet" type="button" disabled={rotatingSecret} onClick={() => setSecretRotateTarget(null)}>Cancelar</button><button className="button-primary" type="button" disabled={rotatingSecret || !adminToken} onClick={() => void rotateApplicationSecret()}><KeyRound size={14} />{rotatingSecret ? 'Regenerando…' : 'Regenerar secreto'}</button></div></section></div>}

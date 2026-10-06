@@ -13,7 +13,6 @@ import {
   isValidPassword,
   makePasswordResetToken,
 } from './password-reset.js'
-import { sendPasswordResetEmail } from './email.js'
 import { legacyApi } from './legacy/api.js'
 
 export const api = Router()
@@ -529,22 +528,11 @@ api.post('/admin/users/:id/password-reset-link', requireAdmin, async (req, res) 
       user_id: user.id,
       token_hash: tokenHash,
       expires_at: expiresAt,
-      delivered_to: 'administration',
+      delivered_to: 'admin_copy',
     })
     if (linkError) throw linkError
 
-    const adminEmail = process.env.RESEND_ADMIN_RESET_EMAIL || process.env.RESEND_FROM_EMAIL
-    if (!adminEmail) return fail(res, 503, 'MAIL_NOT_CONFIGURED', 'Configura RESEND_ADMIN_RESET_EMAIL o RESEND_FROM_EMAIL para enviar el enlace.')
-    const result = await sendPasswordResetEmail({
-      to: adminEmail,
-      url,
-      dip,
-      userName: `${name} ${surname}`.trim(),
-      adminName: 'Administración de PlacetaID',
-    })
-    if (!result.sent) return fail(res, 502, result.reason, 'No se pudo enviar el enlace a Administración.')
-
-    res.status(201).json({ ok: true, dip, expiresAt, url, deliveredTo: adminEmail })
+    res.status(201).json({ ok: true, dip, expiresAt, url })
   } catch (error) { handleDbError(res, error) }
 })
 
