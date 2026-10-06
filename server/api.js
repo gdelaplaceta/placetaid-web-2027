@@ -488,9 +488,10 @@ api.get('/admin/users', requireAdmin, async (req, res) => {
     res.json((users || []).map((user) => {
       const security = controlsById.get(user.id)
       const sessions = (devices || []).filter((row) => row.user_id === user.id && row.active && !row.revoked_at && Date.parse(row.expires_at) > Date.now())
+      const personalName = String(user.nombre_real || user.alias || '').trim().split(/\s+/).filter(Boolean)
       return {
-        id: String(user.id), dip: user.dip, placeid: user.placeid, name: user.alias || String(user.nombre_real || '').split(/\s+/)[0],
-        surname: user.alias ? user.nombre_real || '' : String(user.nombre_real || '').split(/\s+/).slice(1).join(' '),
+        id: String(user.id), dip: user.dip, placeid: user.placeid, name: personalName[0] || '',
+        surname: personalName.slice(1).join(' '),
         birthDate: user.fecha_nacimiento, age: calculateAge(user), email: user.email, phone: null, role: user.rol,
         status: userStatus(user, security), identityVerified: Boolean(security?.identity_verified),
         auth: { mobile: sessions.some((row) => row.method === 'mobile'), authenticator: sessions.some((row) => row.method === 'authenticator'), desktop: sessions.some((row) => row.method === 'desktop') },
@@ -499,6 +500,67 @@ api.get('/admin/users', requireAdmin, async (req, res) => {
         lastAccess: user.ultimo_acceso,
       }
     }))
+  } catch (error) { handleDbError(res, error) }
+})
+
+api.patch('/admin/users/:id/personal-data', requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id)
+  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, 'INVALID_USER_ID', 'La identidad indicada no es válida.')
+  const name = String(req.body?.name || '').trim()
+  const surname = String(req.body?.surname || '').trim()
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  const birthDate = String(req.body?.birthDate || '').trim()
+  const fullName = [name, surname].filter(Boolean).join(' ')
+  if (!name || !surname || name.length > 80 || surname.length > 120 || fullName.length > 160) {
+    return fail(res, 400, 'INVALID_PERSONAL_NAME', 'El nombre y los apellidos son obligatorios y no pueden superar 160 caracteres en total.')
+  }
+  if (email.length > 254 || (email && !isValidEmail(email))) return fail(res, 400, 'INVALID_PERSONAL_EMAIL', 'El correo electrónico no es válido.')
+  if (birthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || Number.isNaN(Date.parse(`${birthDate}T00:00:00Z`)) || new Date(`${birthDate}T00:00:00Z`).toISOString().slice(0, 10) !== birthDate || birthDate > new Date().toISOString().slice(0, 10))) {
+    return fail(res, 400, 'INVALID_BIRTH_DATE', 'La fecha de nacimiento no es válida.')
+  }
+  try {
+    const { data: previous, error: previousError } = await supabase.from('solicitantes')
+      .select('id,nombre_real,email,fecha_nacimiento')
+      .eq('id', userId)
+      .maybeSingle()
+    if (previousError) throw previousError
+    if (!previous) return fail(res, 404, 'USER_NOT_FOUND', 'No se encontró la identidad indicada.')
+    const previousNameParts = String(previous.nombre_real || '').trim().split(/\s+/).filter(Boolean)
+    const changedFields = [
+      ...(previousNameParts[0] !== name ? ['name'] : []),
+      ...(previousNameParts.slice(1).join(' ') !== surname ? ['surname'] : []),
+      ...(String(previous.email || '').trim().toLowerCase() !== email ? ['email'] : []),
+      ...(String(previous.fecha_nacimiento || '') !== birthDate ? ['birthDate'] : []),
+    ]
+    if (!changedFields.length) return fail(res, 400, 'NO_PERSONAL_DATA_CHANGES', 'No hay cambios en los datos personales.')
+
+    const { data: user, error } = await supabase.from('solicitantes').update({
+      nombre_real: fullName,
+      email: email || null,
+      fecha_nacimiento: birthDate || null,
+      edad: birthDate ? calculateAge({ fecha_nacimiento: birthDate }) : null,
+    }).eq('id', userId).select('id,dip,placeid,nombre_real,email,fecha_nacimiento').maybeSingle()
+    if (error?.code === '23505') return fail(res, 409, 'EMAIL_ALREADY_REGISTERED', 'Ese correo ya está vinculado a otra identidad.')
+    if (error) throw error
+    if (!user) return fail(res, 404, 'USER_NOT_FOUND', 'No se encontró la identidad indicada.')
+
+    const { error: auditError } = await supabase.from('plid_v27_audit').insert({
+      target_user_id: user.id,
+      event_type: 'admin_personal_data_updated',
+      details: { fields: changedFields },
+    })
+    if (auditError) console.error('[PlacetaID API] Personal data updated but audit could not be saved:', auditError.message)
+
+    const personalName = String(user.nombre_real || '').trim().split(/\s+/).filter(Boolean)
+    res.json({
+      ok: true,
+      changedFields,
+      user: {
+        id: String(user.id), dip: user.dip, placeid: user.placeid,
+        name: personalName[0] || '', surname: personalName.slice(1).join(' '),
+        email: user.email || '', birthDate: user.fecha_nacimiento || '',
+      },
+    })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -773,7 +835,8 @@ api.get('/public/password-reset/validate', async (req, res) => {
     if (!user || Number(user.lista_negra) === 1 || !['activo', 'active', ''].includes(String(user.estado || '').toLowerCase())) {
       return fail(res, 401, 'RESET_IDENTITY_UNAVAILABLE', 'La cuenta asociada al enlace no está disponible.')
     }
-    res.json({ ok: true, user: { id: String(user.id), dip: user.dip, name: user.alias || String(user.nombre_real || '').split(/\s+/)[0], surname: user.alias ? user.nombre_real || '' : String(user.nombre_real || '').split(/\s+/).slice(1).join(' '), email: user.email }, expiresAt: link.expires_at })
+    const personalName = String(user.nombre_real || user.alias || '').trim().split(/\s+/).filter(Boolean)
+    res.json({ ok: true, user: { id: String(user.id), dip: user.dip, name: personalName[0] || '', surname: personalName.slice(1).join(' '), email: user.email }, expiresAt: link.expires_at })
   } catch (error) { handleDbError(res, error) }
 })
 
@@ -1304,12 +1367,13 @@ async function completeAuthorizedRequest(request, res) {
     : { data: [], error: null }
   if (userConsentError) throw userConsentError
   const granted = new Set((userConsents || []).filter((item) => item.status === 'granted').map((item) => item.field))
+  const personalName = String(user.nombre_real || user.alias || '').trim().split(/\s+/).filter(Boolean)
   const claims = {
     login_correct: true,
     over_16: age !== null && age >= 16,
     over_18: age !== null && age >= 18,
-    name: String(user.alias || user.nombre_real || '').trim().split(/\s+/)[0] || '',
-    surname: user.alias ? String(user.nombre_real || '') : String(user.nombre_real || '').trim().split(/\s+/).slice(1).join(' '),
+    name: personalName[0] || '',
+    surname: personalName.slice(1).join(' '),
     ...(app?.scopes?.dip && granted.has('dip') ? { dip: user.dip } : {}),
     ...(app?.scopes?.email && granted.has('email') ? { email: user.email } : {}),
     ...(app?.scopes?.identityVerified && controls?.identity_verified && granted.has('identityVerified') ? { identity_verified: true } : {}),
@@ -1397,13 +1461,14 @@ api.get('/public/session', requireUserSession, async (req, res) => {
     const security = await supabase.from('plid_v27_user_security').select('status,identity_verified').eq('user_id', req.userId).maybeSingle()
     if (security.error) throw security.error
     const activeDevices = (devices || []).filter((device) => device.active && !device.revoked_at && Date.parse(device.expires_at) > Date.now())
+    const personalName = String(user.nombre_real || user.alias || '').trim().split(/\s+/).filter(Boolean)
     res.json({
       user: {
         id: String(user.id),
         dip: user.dip,
         placeid: user.placeid,
-        name: user.alias || String(user.nombre_real || '').split(/\s+/)[0],
-        surname: user.alias ? user.nombre_real || '' : String(user.nombre_real || '').split(/\s+/).slice(1).join(' '),
+        name: personalName[0] || '',
+        surname: personalName.slice(1).join(' '),
         birthDate: user.fecha_nacimiento,
         email: user.email,
         role: user.rol,

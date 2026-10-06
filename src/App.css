@@ -505,6 +505,9 @@ h1, h2, h3, p { margin-top: 0; }
 .reset-share-message { width: 100%; min-height: 132px; margin-top: 7px; padding: 10px; resize: vertical; border: 1px solid #dfe6de; border-radius: 4px; background: #fbfcfa; color: #34453a; font-family: inherit; font-size: 11px; line-height: 1.55; }
 .reset-share-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .reset-share-actions > :is(button, a) { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.personal-edit-trigger { display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; }
+.personal-data-modal .field-label { display: block; margin: 12px 0 5px; }
+.personal-data-modal .modal-input { display: block; }
 .credential-management-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #e5ebe3; border-radius: 5px; background: #f8faf7; }
 .credential-management-row > div { display: grid; gap: 4px; min-width: 0; }
 .credential-management-row .field-help { margin: 0; }

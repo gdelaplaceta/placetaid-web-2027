@@ -21,6 +21,7 @@ import {
   Mail,
   MessageCircle,
   Monitor,
+  Pencil,
   Phone,
   Plus,
   Search,
@@ -388,7 +389,11 @@ function App() {
   const [resetLoading, setResetLoading] = useState(false)
   const [resetError, setResetError] = useState('')
   const [resetTarget, setResetTarget] = useState<{ dip: string; name: string; surname: string } | null>(null)
-  const [resetLinkShare, setResetLinkShare] = useState<{ name: string; email: string; url: string; message: string; expiresAt: string } | null>(null)
+  const [shareMessage, setShareMessage] = useState<{ kind: 'reset' | 'personal'; name: string; email: string; message: string; url?: string; expiresAt?: string } | null>(null)
+  const [personalEditTarget, setPersonalEditTarget] = useState<ManagedUser | null>(null)
+  const [personalDataDraft, setPersonalDataDraft] = useState({ name: '', surname: '', email: '', birthDate: '' })
+  const [personalDataSaving, setPersonalDataSaving] = useState(false)
+  const [personalDataError, setPersonalDataError] = useState('')
   const [planInfoOpen, setPlanInfoOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [simAppId, setSimAppId] = useState('joven')
@@ -741,10 +746,55 @@ function App() {
       if (!response.ok) throw new Error(payload.message || 'No se pudo generar el enlace.')
       const name = `${user.name} ${user.surname}`.trim()
       const message = `Hola ${name},\n\nPuedes cambiar la contraseña de tu cuenta de PlacetaID desde este enlace:\n${payload.url}\n\nEl enlace es de un solo uso y caduca en 48 horas. Si no solicitaste este cambio, ignora este mensaje.`
-      setResetLinkShare({ name, email: user.email, url: payload.url, expiresAt: payload.expiresAt, message })
+      setShareMessage({ kind: 'reset', name, email: user.email, url: payload.url, expiresAt: payload.expiresAt, message })
       addAudit('Enlace de cambio de contraseña generado para compartir', `${name} · ${user.placeid}`)
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No se pudo generar el enlace.')
+    }
+  }
+
+  function openPersonalDataEditor(user: ManagedUser) {
+    setPersonalEditTarget(user)
+    setPersonalDataDraft({ name: user.name, surname: user.surname, email: user.email, birthDate: user.birthDate })
+    setPersonalDataError('')
+  }
+
+  async function savePersonalData(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!personalEditTarget || !adminToken || !/^\d+$/.test(personalEditTarget.id)) return
+    const previous = personalEditTarget
+    const next = { ...personalDataDraft, email: personalDataDraft.email.trim().toLowerCase() }
+    const labels = [
+      ...(previous.name !== next.name.trim() ? ['nombre'] : []),
+      ...(previous.surname !== next.surname.trim() ? ['apellidos'] : []),
+      ...(previous.email.toLowerCase() !== next.email ? ['correo electrónico'] : []),
+      ...(previous.birthDate !== next.birthDate ? ['fecha de nacimiento'] : []),
+    ]
+    if (!labels.length) {
+      setPersonalEditTarget(null)
+      showToast('No hay cambios que guardar.')
+      return
+    }
+    setPersonalDataSaving(true)
+    setPersonalDataError('')
+    try {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(previous.id)}/personal-data`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify(next),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.message || 'No se pudieron guardar los datos personales.')
+      const updatedUser: ManagedUser = { ...previous, ...payload.user }
+      setUsers((current) => current.map((user) => user.id === previous.id ? updatedUser : user))
+      addAudit('Datos personales actualizados', `${updatedUser.name} ${updatedUser.surname} · ${updatedUser.placeid}`)
+      const message = `Hola ${updatedUser.name},\n\nAdministración de PlacetaID ha actualizado los siguientes datos personales de tu cuenta: ${labels.join(', ')}.\n\nSi no solicitaste este cambio, contacta con Administración.`
+      setShareMessage({ kind: 'personal', name: `${updatedUser.name} ${updatedUser.surname}`.trim(), email: updatedUser.email, message })
+      setPersonalEditTarget(null)
+    } catch (error) {
+      setPersonalDataError(error instanceof Error ? error.message : 'No se pudieron guardar los datos personales.')
+    } finally {
+      setPersonalDataSaving(false)
     }
   }
 
@@ -1416,7 +1466,7 @@ function App() {
             </section>
 
             {selectedUser && <section className="user-detail-panel">
-              <div className="user-profile-heading"><span className="user-avatar user-avatar-large">{selectedUser.name.slice(0, 1)}{selectedUser.surname.slice(0, 1)}</span><div className="user-profile-name"><div className="eyebrow">FICHA DE USUARIO</div><h2>{selectedUser.name} {selectedUser.surname}</h2><span>{selectedUser.placeid} <span className="separator-dot">·</span> {calculateAge(selectedUser.birthDate)} años</span></div><label className={`user-status-select user-status-${selectedUser.status}`}><select aria-label="Estado de la cuenta" value={selectedUser.status} onChange={(event) => { const status = event.target.value as UserStatus; updateUser(selectedUser.id, (current) => ({ ...current, status })); addAudit(`Estado de identidad cambiado a ${userStatusLabel(status)}`, `${selectedUser.name} ${selectedUser.surname}`) }}>{(['active', 'pending', 'restricted', 'suspended', 'closed'] as UserStatus[]).map((status) => <option value={status} key={status}>{userStatusLabel(status)}</option>)}</select><ChevronDown size={12} /></label></div>
+              <div className="user-profile-heading"><span className="user-avatar user-avatar-large">{selectedUser.name.slice(0, 1)}{selectedUser.surname.slice(0, 1)}</span><div className="user-profile-name"><div className="eyebrow">FICHA DE USUARIO</div><h2>{selectedUser.name} {selectedUser.surname}</h2><span>{selectedUser.placeid} <span className="separator-dot">·</span> {calculateAge(selectedUser.birthDate)} años</span><button className="button-quiet personal-edit-trigger" type="button" disabled={!adminToken || !/^\d+$/.test(selectedUser.id)} onClick={() => openPersonalDataEditor(selectedUser)}><Pencil size={13} />Editar datos personales</button></div><label className={`user-status-select user-status-${selectedUser.status}`}><select aria-label="Estado de la cuenta" value={selectedUser.status} onChange={(event) => { const status = event.target.value as UserStatus; updateUser(selectedUser.id, (current) => ({ ...current, status })); addAudit(`Estado de identidad cambiado a ${userStatusLabel(status)}`, `${selectedUser.name} ${selectedUser.surname}`) }}>{(['active', 'pending', 'restricted', 'suspended', 'closed'] as UserStatus[]).map((status) => <option value={status} key={status}>{userStatusLabel(status)}</option>)}</select><ChevronDown size={12} /></label></div>
               <div className="user-password-action-row"><div><strong>Credenciales de acceso</strong><small>Genera un enlace seguro para que la cuenta cambie la contraseña desde la web. No se ejecuta desde una aplicación.</small></div><button className="button-primary" disabled={!adminToken || !/^\d+$/.test(selectedUser.id)} title={!adminToken ? 'Inicia sesión en Administración para continuar.' : !/^\d+$/.test(selectedUser.id) ? 'Esta ficha no corresponde a una identidad real de Supabase.' : undefined} onClick={() => void createResetLink(selectedUser)}><Mail size={14} />Enviar enlace web</button>{(!adminToken || !/^\d+$/.test(selectedUser.id)) && <small className="user-password-action-note">{!adminToken ? 'Inicia sesión en Administración para habilitar esta acción.' : 'Disponible solo para identidades reales cargadas desde Supabase.'}</small>}</div>              <section className="user-detail-section"><div className="user-section-heading"><div><h3>Identidad</h3><p>Datos de referencia de la cuenta</p></div><BadgeCheck size={16} /></div><div className="identity-facts"><div><span>PLACETAID</span><strong>{selectedUser.placeid}</strong></div><div><span>DIP</span><strong>{selectedUser.dip}</strong></div><div><span>NOMBRE COMPLETO</span><strong>{selectedUser.name} {selectedUser.surname}</strong></div><div><span>FECHA DE NACIMIENTO</span><strong>{selectedUser.birthDate}</strong></div><div><span>CORREO REGISTRADO</span><strong>{selectedUser.email}</strong></div><div><span>TELÉFONO REGISTRADO</span><strong>{selectedUser.phone}</strong></div><div><span>ÚLTIMO ACCESO</span><strong>{selectedUser.lastAccess}</strong></div><div><span>VERIFICACIÓN</span><strong className={selectedUser.identityVerified ? 'verified-text' : 'unverified-text'}>{selectedUser.identityVerified ? 'Identidad verificada' : 'Pendiente de verificar'}</strong></div></div></section>
 
               <section className="user-detail-section"><div className="user-section-heading"><div><h3>Métodos de autenticación</h3><p>La pasarela usa la primera sesión disponible</p></div><KeyRound size={16} /></div><div className="auth-methods-row">{[{ key: 'mobile', label: 'PlacetaID móvil', icon: <Smartphone size={16} /> }, { key: 'authenticator', label: 'Autentificador', icon: <KeyRound size={16} /> }, { key: 'desktop', label: 'PlacetaID Desktop', icon: <Monitor size={16} /> }].map((method) => <div className={`auth-method-chip ${selectedUser.auth[method.key as keyof ManagedUser['auth']] ? 'auth-method-active' : ''}`} key={method.key}>{method.icon}<span>{method.label}</span><i /></div>)}</div><div className="auth-priority-note"><Fingerprint size={13} />Prioridad detectada: <strong>{authMethod(selectedUser) === 'mobile' ? 'PlacetaID móvil' : authMethod(selectedUser) === 'authenticator' ? 'Autentificador' : authMethod(selectedUser) === 'desktop' ? 'PlacetaID Desktop' : 'sin sesión disponible'}</strong></div></section>
@@ -1590,21 +1640,38 @@ function App() {
         {isPublicView ? <footer className="public-footer"><span>PlacetaID v27.0 <i>·</i> Plan 2027 · Ámbito 25</span><span>Identidad digital segura</span></footer> : <footer className="app-footer"><span><span className="footer-mark"><Fingerprint size={13} /></span>PlacetaID v27.0 <span className="footer-dot">·</span> Gobierno de identidad</span><span>Panel de Administración <span className="footer-dot">·</span> Vista previa</span></footer>}
       </main>
 
-      {resetLinkShare && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetLinkShare(null) }}>
-        <section className="integration-modal reset-share-modal" role="dialog" aria-modal="true" aria-labelledby="reset-share-title">
-          <div className="modal-topline"><span className="modal-icon"><KeyRound size={18} /></span><button type="button" className="icon-button" aria-label="Cerrar enlace de restablecimiento" onClick={() => setResetLinkShare(null)}><X size={17} /></button></div>
-          <h2 id="reset-share-title">Enlace listo para compartir</h2>
-          <p>El enlace no se ha enviado. Copia el mensaje o ábrelo en WhatsApp o en el correo para enviarlo manualmente a <strong>{resetLinkShare.name}</strong>.</p>
-          <label className="field-label" htmlFor="reset-share-message">Mensaje con enlace · caduca {new Date(resetLinkShare.expiresAt).toLocaleString('es-ES')}</label>
-          <textarea className="reset-share-message" id="reset-share-message" readOnly value={resetLinkShare.message} />
+      {personalEditTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !personalDataSaving) setPersonalEditTarget(null) }}>
+        <form className="integration-modal personal-data-modal" onSubmit={savePersonalData}>
+          <div className="modal-topline"><span className="modal-icon"><Pencil size={17} /></span><button type="button" className="icon-button" aria-label="Cerrar edición de datos personales" disabled={personalDataSaving} onClick={() => setPersonalEditTarget(null)}><X size={17} /></button></div>
+          <h2>Editar datos personales</h2>
+          <p>La identidad PlacetaID y el DIP no se modifican desde esta pantalla.</p>
+          <label className="field-label" htmlFor="personal-name">Nombre</label>
+          <input className="modal-input" id="personal-name" autoComplete="given-name" maxLength={80} required value={personalDataDraft.name} onChange={(event) => setPersonalDataDraft((current) => ({ ...current, name: event.target.value }))} />
+          <label className="field-label" htmlFor="personal-surname">Apellidos</label>
+          <input className="modal-input" id="personal-surname" autoComplete="family-name" maxLength={120} required value={personalDataDraft.surname} onChange={(event) => setPersonalDataDraft((current) => ({ ...current, surname: event.target.value }))} />
+          <label className="field-label" htmlFor="personal-email">Correo electrónico</label>
+          <input className="modal-input" id="personal-email" type="email" autoComplete="email" maxLength={254} value={personalDataDraft.email} onChange={(event) => setPersonalDataDraft((current) => ({ ...current, email: event.target.value }))} />
+          <label className="field-label" htmlFor="personal-birth-date">Fecha de nacimiento</label>
+          <input className="modal-input" id="personal-birth-date" type="date" max={new Date().toISOString().slice(0, 10)} value={personalDataDraft.birthDate} onChange={(event) => setPersonalDataDraft((current) => ({ ...current, birthDate: event.target.value }))} />
+          {personalDataError && <p className="gateway-error" role="alert">{personalDataError}</p>}
+          <div className="modal-actions"><button className="button-quiet" type="button" disabled={personalDataSaving} onClick={() => setPersonalEditTarget(null)}>Cancelar</button><button className="button-primary" type="submit" disabled={personalDataSaving}>{personalDataSaving ? 'Guardando…' : 'Guardar cambios'}</button></div>
+        </form>
+      </div>}
+      {shareMessage && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShareMessage(null) }}>
+        <section className="integration-modal reset-share-modal" role="dialog" aria-modal="true" aria-labelledby="share-message-title">
+          <div className="modal-topline"><span className="modal-icon">{shareMessage.kind === 'reset' ? <KeyRound size={18} /> : <Pencil size={17} />}</span><button type="button" className="icon-button" aria-label="Cerrar mensaje para compartir" onClick={() => setShareMessage(null)}><X size={17} /></button></div>
+          <h2 id="share-message-title">{shareMessage.kind === 'reset' ? 'Enlace listo para compartir' : 'Cambio guardado'}</h2>
+          <p>{shareMessage.kind === 'reset' ? <>El enlace no se ha enviado. Copia el mensaje o ábrelo en WhatsApp o correo para enviarlo manualmente a <strong>{shareMessage.name}</strong>.</> : <>Los datos se guardaron. Puedes copiar este aviso o enviarlo manualmente a <strong>{shareMessage.name}</strong>.</>}</p>
+          <label className="field-label" htmlFor="share-message-body">Mensaje{shareMessage.expiresAt ? ` · enlace válido hasta ${new Date(shareMessage.expiresAt).toLocaleString('es-ES')}` : ''}</label>
+          <textarea className="reset-share-message" id="share-message-body" readOnly value={shareMessage.message} />
           <div className="reset-share-actions">
-            <button className="button-primary" type="button" onClick={() => void copyCredential(resetLinkShare.message)}><ClipboardCheck size={14} />Copiar mensaje</button>
-            <button className="button-quiet" type="button" onClick={() => void copyCredential(resetLinkShare.url)}><KeyRound size={14} />Copiar enlace</button>
-            <a className="button-quiet" href={`https://wa.me/?${new URLSearchParams({ text: resetLinkShare.message }).toString()}`} target="_blank" rel="noreferrer"><MessageCircle size={14} />WhatsApp</a>
-            <a className="button-quiet" href={`mailto:${encodeURIComponent(resetLinkShare.email)}?${new URLSearchParams({ subject: 'Cambio de contraseña de PlacetaID', body: resetLinkShare.message }).toString()}`}><Mail size={14} />Correo</a>
+            <button className="button-primary" type="button" onClick={() => void copyCredential(shareMessage.message)}><ClipboardCheck size={14} />Copiar mensaje</button>
+            {shareMessage.url && <button className="button-quiet" type="button" onClick={() => void copyCredential(shareMessage.url!)}><KeyRound size={14} />Copiar enlace</button>}
+            <a className="button-quiet" href={`https://wa.me/?${new URLSearchParams({ text: shareMessage.message }).toString()}`} target="_blank" rel="noreferrer"><MessageCircle size={14} />WhatsApp</a>
+            <a className="button-quiet" href={`mailto:${encodeURIComponent(shareMessage.email)}?${new URLSearchParams({ subject: shareMessage.kind === 'reset' ? 'Cambio de contraseña de PlacetaID' : 'Actualización de datos personales de PlacetaID', body: shareMessage.message }).toString()}`}><Mail size={14} />Correo</a>
           </div>
-          <div className="modal-info"><ShieldAlert size={15} /><span>El envío solo ocurre si Administración confirma el mensaje desde WhatsApp o su aplicación de correo. El enlace es de un solo uso.</span></div>
-          <div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setResetLinkShare(null)}>Cerrar</button></div>
+          <div className="modal-info"><ShieldAlert size={15} /><span>El mensaje solo se envía si Administración confirma la acción desde WhatsApp o su aplicación de correo.</span></div>
+          <div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setShareMessage(null)}>Cerrar</button></div>
         </section>
       </div>}
 
