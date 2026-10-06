@@ -41,7 +41,7 @@ import './App.css'
 type Role = 'administrador' | 'miembro' | 'entidad' | 'visitante'
 type IntegrationStatus = 'authorized' | 'disabled' | 'pending'
 type AgeLimit = 0 | 16 | 18
-type View = 'home' | 'applications' | 'users' | 'permissions' | 'gateway' | 'myPermissions' | 'simulator' | 'activity' | 'resetPassword'
+type View = 'home' | 'register' | 'applications' | 'users' | 'permissions' | 'gateway' | 'myPermissions' | 'simulator' | 'activity' | 'resetPassword'
 type ProtectedField = 'dip' | 'email' | 'phone' | 'photo' | 'identityVerified'
 type UserStatus = 'active' | 'pending' | 'restricted' | 'suspended' | 'closed'
 type ConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked'
@@ -566,7 +566,7 @@ function App() {
     return matchesQuery && (userStatusFilter === 'all' || user.status === userStatusFilter)
   })
   const pendingConsentCount = users.reduce((count, user) => count + user.permissions.filter((permission) => permission.status === 'pending').length, 0)
-  const isPublicView = view === 'home' || view === 'gateway' || view === 'myPermissions' || view === 'resetPassword'
+  const isPublicView = view === 'home' || view === 'register' || view === 'gateway' || view === 'myPermissions' || view === 'resetPassword'
 
   const simApp = integrations.find((item) => item.id === simAppId)
   const simService = simApp?.services.find((service) => service.id === simServiceId) ?? simApp?.services[0]
@@ -1055,6 +1055,50 @@ function App() {
     }
   }
 
+  async function submitOnlineRegistration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const dip = gatewayDip.replace(/[\s-]/g, '').toUpperCase()
+    if (!/^\d{8}[A-Z]$/.test(dip)) {
+      setGatewayError('Introduce el DIP completo: 8 números y una letra.')
+      return
+    }
+    if (!gatewayPassword) {
+      setGatewayError('Introduce la contraseña que ya utilizas en PL26.')
+      return
+    }
+    if (!passwordLoginEnabled) {
+      setGatewayError('La activación online con contraseña está deshabilitada. Contacta con Administración.')
+      return
+    }
+    setGatewayBusy(true)
+    setGatewayError('')
+    try {
+      const response = await fetch('/api/public/password-authenticate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dip, password: gatewayPassword }),
+      })
+      const payload: GatewayResponse = await response.json()
+      if (!response.ok) throw new Error(payload.message || 'No se pudo validar la cuenta PL26.')
+      setGatewayDip(dip)
+      setGatewayPassword('')
+      setGatewayRequestId(payload.requestId || '')
+      setGatewayMethod('password')
+      setGatewayAppName('')
+      setGatewayServiceName('')
+      setGatewayClaims(null)
+      setGatewayError('')
+      setTermsAccepted(false)
+      setPrivacyAccepted(false)
+      setView('gateway')
+      await processGatewayResponse(payload)
+    } catch (error) {
+      setGatewayError(error instanceof Error ? error.message : 'No se pudo conectar con PL26 para verificar la cuenta.')
+    } finally {
+      setGatewayBusy(false)
+    }
+  }
+
   async function acceptLegalDocuments() {
     if (!gatewayRequestId || !termsAccepted || !privacyAccepted) {
       setGatewayError('Acepta los términos y la política de privacidad para continuar.')
@@ -1341,7 +1385,7 @@ function App() {
 
       <main className={isPublicView ? 'public-main' : 'main-area'}>
         {isPublicView ? <>
-          <header className="public-topbar"><div className="public-brand-pair"><button className="public-brand" aria-label="PlacetaID" onClick={() => setView('gateway')}><span className="brand-mark"><Fingerprint size={21} /></span><span><strong>placeta<span>id</span></strong><small>IDENTIDAD DIGITAL</small></span></button>{view === 'gateway' && initialGatewayRequest.bound && requestingAppLogo && <><span className="public-brand-arrow" aria-label={`aplicación solicitante: ${gatewayPreview?.app.name}`}><ArrowRight size={18} /></span><img className="public-requesting-app-logo" src={requestingAppLogo} alt={`Logo de ${gatewayPreview?.app.name}`} /></>}</div><div className="public-topbar-actions">{view === 'myPermissions' && <button className="public-action" onClick={() => setView('gateway')}><ArrowRight className="back-arrow" size={15} />Pasarela</button>}{gatewayStage === 'authenticated' && gatewayUser && view === 'gateway' && <button className="public-action" onClick={() => setView('myPermissions')}><LockKeyhole size={15} />Mis permisos</button>}{gatewayStage === 'authenticated' && gatewayUser && <button className="public-action" onClick={() => void logoutGatewayUser()}>Cerrar sesión</button>}<button className="admin-entry" onClick={() => setView('applications')}><LockKeyhole size={14} />Administración</button></div></header>
+          <header className="public-topbar"><div className="public-brand-pair"><button className="public-brand" aria-label="Volver al inicio de PlacetaID" onClick={() => setView('home')}><span className="brand-mark"><Fingerprint size={21} /></span><span><strong>placeta<span>id</span></strong><small>IDENTIDAD DIGITAL</small></span></button>{view === 'gateway' && initialGatewayRequest.bound && requestingAppLogo && <><span className="public-brand-arrow" aria-label={`aplicación solicitante: ${gatewayPreview?.app.name}`}><ArrowRight size={18} /></span><img className="public-requesting-app-logo" src={requestingAppLogo} alt={`Logo de ${gatewayPreview?.app.name}`} /></>}</div><div className="public-topbar-actions">{view === 'myPermissions' && <button className="public-action" onClick={() => setView('gateway')}><ArrowRight className="back-arrow" size={15} />Pasarela</button>}{gatewayStage === 'authenticated' && gatewayUser && view === 'gateway' && <button className="public-action" onClick={() => setView('myPermissions')}><LockKeyhole size={15} />Mis permisos</button>}{gatewayStage === 'authenticated' && gatewayUser && <button className="public-action" onClick={() => void logoutGatewayUser()}>Cerrar sesión</button>}<button className="admin-entry" onClick={() => setView('applications')}><LockKeyhole size={14} />Administración</button></div></header>
         </> : <>
           <header className="topbar">
             <div className="breadcrumbs"><span>PlacetaID</span><ChevronRight size={14} /><strong>{{ applications: 'Aplicaciones', users: 'Usuarios', permissions: 'Permisos personales', gateway: 'Pasarela DIP', myPermissions: 'Mis permisos', simulator: 'Simulador de acceso', activity: 'Registro de actividad' }[view]}</strong></div>
@@ -1352,13 +1396,31 @@ function App() {
 
         {view === 'resetPassword' && <div className="public-reset-page"><section className="reset-card"><div className="reset-card-icon"><KeyRound size={25} /></div><span className="public-kicker">CAMBIO DE CONTRASEÑA</span><h1>Tu acceso seguro</h1><p>El enlace fue creado para cambiar la contraseña de tu cuenta desde la web. No se requiere abrir ni ejecutar la aplicación.</p>{resetLoading && <div className="reset-status"><span />Validando enlace…</div>}{resetError && <p className="gateway-error" role="alert">{resetError}</p>}{resetTarget ? <form className="reset-form" onSubmit={submitResetPassword}><div className="reset-target"><span>{resetTarget.dip}</span><strong>{resetTarget.name} {resetTarget.surname}</strong></div><label className="field-label" htmlFor="reset-password">Nueva contraseña</label><input className="modal-input" id="reset-password" type="password" autoComplete="new-password" minLength={8} maxLength={256} value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} required /><small className="field-help">Entre 8 y 256 caracteres, con al menos una letra y un número.</small><label className="field-label" htmlFor="reset-password-confirm">Confirmar contraseña</label><input className="modal-input" id="reset-password-confirm" type="password" autoComplete="new-password" maxLength={256} value={resetPasswordConfirmation} onChange={(event) => setResetPasswordConfirmation(event.target.value)} required /><button className="button-primary" type="submit" disabled={resetLoading}>{resetLoading ? 'Cambiando…' : 'Cambiar contraseña'}</button></form> : !resetLoading && <div className="reset-status reset-error"><ShieldAlert size={16} />El enlace no está válido, caducó o fue utilizado.</div>}<button className="text-action" onClick={() => setView('home')}>Volver a PlacetaID <ArrowRight size={13} /></button></section></div>}
 
+        {view === 'register' && <div className="public-registration">
+          <section className="registration-heading"><span className="public-kicker">ACTIVACIÓN DE CUENTA</span><h1>Activa tu PlacetaID</h1><p>Para registrarte online necesitas una cuenta existente de PL26. Verificamos tu acceso directamente con su servidor y traemos de allí los datos de tu perfil.</p></section>
+          <div className="registration-layout">
+            <form className="registration-form" onSubmit={submitOnlineRegistration}>
+              <div className="registration-form-heading"><span className="registration-step-number">01</span><div><h2>Verifica tu cuenta</h2><p>Introduce el DIP y la contraseña que ya utilizas en PL26.</p></div></div>
+              <label className="field-label" htmlFor="registration-dip">DIP</label>
+              <input id="registration-dip" className="gateway-dip-input" value={gatewayDip} onChange={(event) => { setGatewayDip(event.target.value.toUpperCase()); setGatewayError('') }} placeholder="12345678Z" maxLength={11} autoComplete="username" required />
+              <label className="field-label registration-password-label" htmlFor="registration-password">Contraseña PL26</label>
+              <input id="registration-password" className="gateway-password-input" type="password" value={gatewayPassword} onChange={(event) => { setGatewayPassword(event.target.value); setGatewayError('') }} maxLength={256} autoComplete="current-password" required />
+              <p className="gateway-input-note"><LockKeyhole size={13} />La contraseña se comprueba servidor a servidor y nunca se muestra ni se comparte con aplicaciones.</p>
+              {gatewayError && <p className="gateway-error" role="alert">{gatewayError}</p>}
+              <button className="button-primary gateway-continue" type="submit" disabled={gatewayBusy || !passwordLoginEnabled}>{gatewayBusy ? 'Verificando…' : !passwordLoginEnabled ? 'Activación no disponible' : 'Verificar y continuar'} <ArrowRight size={15} /></button>
+              <button className="registration-back-link" type="button" onClick={() => { setGatewayError(''); setView('home') }}>Volver al inicio</button>
+            </form>
+            <aside className="registration-process"><h2>Tu alta, paso a paso</h2><ol><li><span>01</span><div><strong>Comprueba PL26</strong><small>Validamos tus credenciales con la cuenta existente.</small></div></li><li><span>02</span><div><strong>Importa tu perfil</strong><small>Nombre, apellidos, correo y fecha disponibles en PL26.</small></div></li><li><span>03</span><div><strong>Revisa la privacidad</strong><small>Acepta los términos y la política antes de continuar.</small></div></li><li><span>04</span><div><strong>Entra en PlacetaID</strong><small>Se activa tu sesión web; podrás vincular tus dispositivos después.</small></div></li></ol><p>¿No tienes una cuenta PL26 o no recuerdas la contraseña? Contacta con Administración para verificar tu identidad.</p></aside>
+          </div>
+        </div>}
+
         {view === 'home' && <div className="public-home">
           <section className="public-home-hero">
-            <div className="public-home-copy"><span className="public-kicker">IDENTIDAD DIGITAL · PLAN 2027</span><h1>Tu identidad.<br /><em>Tu decisión.</em></h1><p>PlacetaID permite entrar en los servicios de La Placeta sin compartir más datos de los necesarios.</p><div className="public-home-actions"><span className="home-access-note"><LockKeyhole size={16} /> El acceso se inicia desde una aplicación autorizada mediante <code>client_id</code>.</span></div></div>
+            <div className="public-home-copy"><span className="public-kicker">IDENTIDAD DIGITAL · PLAN 2027</span><h1>Tu identidad.<br /><em>Tu decisión.</em></h1><p>Una cuenta segura para acceder a los servicios de La Placeta. Tú revisas cada solicitud y decides qué datos compartir.</p><div className="public-home-actions"><button className="public-home-primary" onClick={() => { setGatewayError(''); setView('gateway') }}><LockKeyhole size={15} />Iniciar sesión</button><button className="public-home-secondary" onClick={() => { setGatewayError(''); setGatewayPassword(''); setView('register') }}><UserRoundPlus size={15} />Darme de alta online</button></div><span className="home-access-note"><ShieldCheck size={15} />El alta online verifica tu cuenta PL26 existente.</span></div>
             <div className="public-home-card"><span className="home-card-icon"><Fingerprint size={25} /></span><span className="public-kicker">PLACETAID</span><h2>Acceso seguro<br />para todo el ecosistema.</h2><div className="home-card-line"><ShieldCheck size={16} /><span>Sin contraseñas compartidas</span></div><div className="home-card-line"><LockKeyhole size={16} /><span>Tú decides cada dato</span></div></div>
           </section>
           <section className="public-home-features"><div><span>01</span><h3>Identifícate</h3><p>Usa tu DIP y el método de acceso que tengas vinculado.</p></div><div><span>02</span><h3>Revisa</h3><p>Comprueba qué aplicación solicita el acceso y para qué servicio.</p></div><div><span>03</span><h3>Decide</h3><p>Concede o revoca datos protegidos cuando quieras.</p></div></section>
-          <section className="public-home-cta"><div><span className="public-kicker">CONTROL DEL TITULAR</span><h2>La identidad es tuya.</h2></div><span className="home-access-note"><LockKeyhole size={15} /> Inicio delegado por la aplicación solicitante</span></section>
+          <section className="public-home-cta"><div><span className="public-kicker">CONTROL DEL TITULAR</span><h2>La identidad es tuya.</h2></div><span className="home-access-note"><LockKeyhole size={15} />Tus datos personales nunca se comparten sin autorización.</span></section>
         </div>}
 
         {view === 'applications' && (
