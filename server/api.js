@@ -869,7 +869,7 @@ api.post('/public/password-reset', authLimiter, async (req, res) => {
     }, { onConflict: 'user_id' })
     if (credentialError) throw credentialError
     const [{ error: linkUpdateError }, { error: devicesError }, { error: sessionsError }, { error: auditError }] = await Promise.all([
-      supabase.from('plid_v27_password_reset_links').update({ used_at: now }).eq('id', link.id).eq('used_at', null),
+      supabase.from('plid_v27_password_reset_links').update({ used_at: now }).eq('id', link.id).is('used_at', null),
       supabase.from('plid_v27_devices').update({ active: false, revoked_at: now }).eq('user_id', user.id).eq('active', true).is('revoked_at', null),
       supabase.from('plid_v27_sessions').update({ revoked_at: now }).eq('user_id', user.id).is('revoked_at', null),
       supabase.from('plid_v27_audit').insert({ target_user_id: user.id, event_type: 'password_reset_link_used', details: { one_use: true, expires_at: link.expires_at } }),
