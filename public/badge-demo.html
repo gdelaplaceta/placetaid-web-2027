@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ejemplo · Sitio Verificado PlacetaID</title>
+    <style>
+      body { margin: 0; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; background: #f8fafc; }
+      header { padding: 18px 24px; background: #0f766e; color: #fff; font-weight: 700; }
+      main { max-width: 760px; margin: 0 auto; padding: 32px 24px 120px; }
+      code { background: #e2e8f0; padding: 2px 6px; border-radius: 6px; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <header>Club Deportivo · Página de ejemplo</header>
+    <main>
+      <h1>Página de demostración</h1>
+      <p>
+        Esta página simula una web que usa PlacetaID. La insignia <strong>Sitio Verificado</strong>
+        aparece abajo a la derecha solo si el dominio de esta página está registrado en la aplicación.
+      </p>
+      <p>
+        Sustituye <code>data-client-id</code> por el client ID de tu aplicación, que encontrarás en
+        Administración → Aplicaciones.
+      </p>
+    </main>
+    <script src="/verified-badge.js" data-placetaid-badge data-client-id="voley-club" defer></script>
+  </body>
+</html>

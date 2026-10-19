@@ -10,7 +10,8 @@
     "start": "node server/index.js",
     "typecheck": "tsc -p tsconfig.app.json --noEmit --incremental false",
     "build": "npm run typecheck && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:badge": "node --test server/badge.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

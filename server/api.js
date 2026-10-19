@@ -14,6 +14,7 @@ import {
   makePasswordResetToken,
 } from './password-reset.js'
 import { legacyApi } from './legacy/api.js'
+import { baseDisclosureFields, buildBadgePayload, shareableConsentFields, unavailableConsentFields } from './badge.js'
 
 export const api = Router()
 
@@ -57,9 +58,6 @@ const identifyLimiter = rateLimit({
 })
 const deviceEnrollmentLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false })
 const deviceLifetimeMs = 365 * 24 * 60 * 60 * 1000
-const shareableConsentFields = ['dip', 'email', 'identityVerified']
-const unavailableConsentFields = ['phone', 'photo']
-const baseDisclosureFields = ['login_correct', 'over_16', 'over_18', 'name', 'surname']
 
 function fail(res, status, code, message) {
   return res.status(status).json({ error: code, message })
@@ -1274,6 +1272,38 @@ api.get('/public/authorize/preview', authLimiter, async (req, res) => {
         unavailable: unavailableConsentFields.filter((field) => app.scopes?.[field]),
       },
     })
+  } catch (error) { handleDbError(res, error) }
+})
+
+const badgeLimiter = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false })
+
+// Insignia "Sitio Verificado": lectura pública y sin secretos. Solo verifica si el origen
+// que la pide coincide con una URI de retorno registrada de una aplicación autorizada.
+api.get('/public/badge', badgeLimiter, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*')
+  res.set('Cache-Control', 'public, max-age=300')
+  const clientId = String(req.query.client_id || '').trim()
+  const origin = String(req.query.origin || '').trim()
+  if (!clientId || clientId.length > 200 || !origin || origin.length > 300) {
+    return res.status(400).json({ verified: false, reason: 'invalid_request' })
+  }
+  if (!supabaseReady) return res.status(503).json({ verified: false, reason: 'unavailable' })
+  try {
+    const { data: app, error: appError } = await supabase.from('plid_v27_integrations')
+      .select('id,name,description,category,initials,color,logo_url,brand_color,redirect_uris,status,min_age,allowed_roles,scopes')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    if (appError) throw appError
+    let services = []
+    if (app) {
+      const { data, error: serviceError } = await supabase.from('plid_v27_services')
+        .select('name,description,min_age,allowed_roles,enabled')
+        .eq('app_id', app.id)
+        .order('created_at')
+      if (serviceError) throw serviceError
+      services = data || []
+    }
+    res.json(buildBadgePayload({ app, services, origin }))
   } catch (error) { handleDbError(res, error) }
 })
 

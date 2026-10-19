@@ -572,6 +572,9 @@ function App() {
   }, [view, adminToken])
 
   const selected = integrations.find((item) => item.id === selectedId) ?? integrations[0]
+  const badgeSnippet = selected?.clientId
+    ? `<script src="${window.location.origin}/verified-badge.js" data-placetaid-badge data-client-id="${selected.clientId}" defer></script>`
+    : ''
   const visibleIntegrations = useMemo(() => integrations.filter((item) => {
     const matchesQuery = `${item.name} ${item.category}`.toLowerCase().includes(query.toLowerCase())
     return matchesQuery && (statusFilter === 'all' || item.status === statusFilter)
@@ -1527,6 +1530,11 @@ function App() {
                     <div className="endpoint-copy-row"><code>{new URL('/api/public/exchange', window.location.origin).toString()}</code><button type="button" className="icon-button" aria-label="Copiar endpoint de canje" onClick={() => void copyEndpoint('Endpoint de canje', new URL('/api/public/exchange', window.location.origin).toString())}><ClipboardCheck size={15} /></button></div>
                     <small className="field-help">Usa <code>POST</code> con <code>client_id</code>, <code>client_secret</code>, <code>code</code> y <code>redirect_uri</code>. Nunca pongas el secreto en el navegador.</small>
                   </div>
+                  <div className="endpoint-value">
+                    <span className="field-label">Insignia «Sitio Verificado» · para tu web</span>
+                    {badgeSnippet ? <div className="endpoint-copy-row"><code>{badgeSnippet}</code><button type="button" className="icon-button" aria-label="Copiar código de la insignia" onClick={() => void copyEndpoint('Código de la insignia', badgeSnippet)}><Code2 size={13} /></button></div> : <small className="field-help">Registra la aplicación para obtener su client ID.</small>}
+                    <small className="field-help">Pégalo antes de <code>&lt;/body&gt;</code> en las páginas cuyo dominio esté registrado como callback. La insignia solo aparece si el dominio coincide.</small>
+                  </div>
                   <div className="endpoint-value credential-management-row">
                     <div><span className="field-label">Secreto de cliente · solo servidor</span><small className="field-help">No se puede consultar de nuevo; regenera uno si ya no lo tienes. El anterior dejará de funcionar.</small></div>
                     <button type="button" className="button-quiet" disabled={!adminToken || !selected.clientId} onClick={() => { setRotateSecretError(''); setSecretRotateTarget(selected) }}><KeyRound size={13} />Regenerar secreto</button>
@@ -1745,7 +1753,7 @@ function App() {
 
         {view === 'activity' && <div className="page-content activity-page"><section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />TRAZABILIDAD</div><h1>Registro de actividad</h1><p>Historial local de cambios realizados en esta vista previa.</p></div><span className="local-only-tag"><Activity size={14} />REGISTRO LOCAL</span></section><section className="activity-panel"><div className="activity-panel-heading"><div><h2>Últimos cambios</h2><p>Las acciones quedan vinculadas a la integración afectada.</p></div><span className="total-chip">{audit.length} eventos</span></div>{audit.map((entry) => <div className="audit-row" key={entry.id}><span className="audit-icon"><ClipboardCheck size={16} /></span><div><strong>{entry.action}</strong><small>{entry.subject}</small></div><time>{entry.time}</time></div>)}</section></div>}
 
-        {isPublicView ? <footer className="public-footer"><span>PlacetaID v27.0 <i>·</i> Plan 2027 · Ámbito 25</span><span>Identidad digital segura</span></footer> : <footer className="app-footer"><span><span className="footer-mark"><Fingerprint size={13} /></span>PlacetaID v27.0 <span className="footer-dot">·</span> Gobierno de identidad</span><span>Panel de Administración <span className="footer-dot">·</span> Vista previa</span></footer>}
+        {isPublicView ? <footer className="public-footer"><span>PlacetaID v27.0 <i>·</i> Plan 2027 · Ámbito 25</span><a className="public-contact" href="mailto:seguridaddigital@laplaceta.org?subject=Queja%20o%20sugerencia%20sobre%20PlacetaID">Quejas y sugerencias: seguridaddigital@laplaceta.org</a><span>Identidad digital segura</span></footer> : <footer className="app-footer"><span><span className="footer-mark"><Fingerprint size={13} /></span>PlacetaID v27.0 <span className="footer-dot">·</span> Gobierno de identidad</span><span>Panel de Administración <span className="footer-dot">·</span> Vista previa</span></footer>}
       </main>
 
       {personalEditTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !personalDataSaving) setPersonalEditTarget(null) }}>

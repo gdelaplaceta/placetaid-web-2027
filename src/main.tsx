@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import './theme.css'
 import './identity.css'
+import './polish.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

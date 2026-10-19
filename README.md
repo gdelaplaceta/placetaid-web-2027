@@ -75,6 +75,61 @@ El alias `https://placetaid-web-2027.vercel.app` redirige al alias activo `https
 
 Configura RSP con `PLACETAID_API_URL=https://placetaid-web-plan2027.vercel.app/api`. La última comprobación de producción reportó faltantes de `plid_v27_legacy_credentials`, `plid_v27_legacy_auth_requests`, `rsp_votaciones`, y `rsp_documentos` (también se crea `rsp_registro_votos` y `rsp_notificaciones`). Aplica, en orden, las cuatro migraciones indicadas arriba en el SQL Editor del proyecto Supabase y confirma que `/api/health` responda `ok: true` antes de probar login o migrar cuentas. El acceso SQL de Supabase no está disponible desde el entorno de desarrollo.
 
+## Insignia «Sitio Verificado» para webs integradas
+
+Cualquier web que use PlacetaID puede mostrar una insignia pequeña abajo a la derecha con el logo de la aplicación y el texto **Sitio Verificado**. Al pulsarla se abre un popup con la información de la aplicación, el servicio, los requisitos de inicio de sesión, los datos que recibe y un contacto para quejas o sugerencias.
+
+### Instalación
+
+Registra la aplicación en Administración, autorízala y copia el código que aparece en **Insignia «Sitio Verificado» · para tu web**. Tiene esta forma, antes de `</body>`:
+
+```html
+<script src="https://placetaid-web-plan2027.vercel.app/verified-badge.js"
+        data-placetaid-badge data-client-id="TU_CLIENT_ID" defer></script>
+```
+
+Atributos opcionales: `data-position="bottom-left"` cambia la esquina, y `data-api="https://..."` indica otro origen para la API si no coincide con el del script.
+
+### Cuándo aparece
+
+La insignia solo se muestra si PlacetaID confirma las tres condiciones:
+
+1. La aplicación está **autorizada** (una aplicación pendiente nunca se muestra como verificada).
+2. El origen de la página (esquema, dominio y puerto) coincide exactamente con el origen de una **URI de retorno registrada**. Una copia del código en otro dominio no se verifica.
+3. El `client_id` existe.
+
+Si alguna falla, el widget no muestra nada y no revela el motivo a la página anfitriona.
+
+### Contenido del popup
+
+- **Servicio al que accedes**: nombre, edad mínima y perfiles permitidos de cada servicio activo.
+- **Requisitos para iniciar sesión**: edad mínima, perfiles permitidos, cuenta activa y método de acceso vinculado.
+- **Datos que recibe la aplicación**: los siempre enviados (resultado de autenticación, indicadores de edad, nombre y apellidos), los que solo se envían si el titular lo autoriza, y los que no se comparten. Las contraseñas, códigos temporales y tokens de dispositivo nunca se envían.
+- **Quejas y sugerencias**: `seguridaddigital@laplaceta.org`.
+
+### Políticas de la página anfitriona
+
+Para usar el widget, la página debe permitir el script y la llamada a la API en su Content-Security-Policy:
+
+```text
+script-src https://placetaid-web-plan2027.vercel.app;
+connect-src https://placetaid-web-plan2027.vercel.app;
+img-src https://placetaid-web-plan2027.vercel.app data: https:;
+```
+
+### Endpoint público
+
+`GET /api/public/badge?client_id=<client_id>&origin=<origen>` responde sin autenticación, con `Access-Control-Allow-Origin: *`, caché de 5 minutos y un límite de 120 peticiones por minuto. La respuesta nunca incluye secretos, URIs registradas ni reglas internas. Si la aplicación no se verifica, devuelve `verified: false` con un motivo genérico (`unknown_app`, `not_authorized`, `origin_mismatch` o `invalid_request`).
+
+### Pruebas
+
+- `npm run test:badge` ejecuta las pruebas del módulo que construye la respuesta pública (origen, estado, secretos, logos y permisos).
+- `public/badge-demo.html` es una página de ejemplo para probar el widget en local con un `client_id` registrado.
+
+## Estilos
+
+Los estilos se cargan en este orden en `src/main.tsx`: `index.css`, `App.css`, `theme.css`, `identity.css` y, al final, `polish.css`. `polish.css` es la capa de pulido visual: ajusta contraste WCAG AA, tamaños mínimos legibles, estados (aprobado, pendiente, bloqueado), foco de teclado y notificaciones. Si añades estilos nuevos que deban ganar a las capas anteriores, colócalos en esa última capa o redefínelos allí; evita duplicar reglas de color en `theme.css`, que contiene una paleta anterior.
+
 ## Qué es persistente
 
 - Catálogo, client IDs, reglas de acceso, identidades consultadas, sesiones, aceptación legal, consentimientos y auditoría: Supabase.

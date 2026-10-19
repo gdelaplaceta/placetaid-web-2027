@@ -1,0 +1,309 @@
+/*
+ * PlacetaID v27 · capa de pulido visual
+ *
+ * Se importa la última (main.tsx) para ganar en cascada a App.css, theme.css e
+ * identity.css sin reescribirlos. Objetivos:
+ *  - contraste WCAG AA en todo el texto legible (medido con auditoría automática);
+ *  - tamaño mínimo legible (nada por debajo de 11 px en la consola);
+ *  - estados (aprobado, pendiente, bloqueado) coherentes entre vistas;
+ *  - foco de teclado visible en todos los controles;
+ *  - notificaciones y fichas sin solapes.
+ */
+
+:root {
+  --pl-ink: #1c0836;
+  --pl-ink-2: #3f2b57;
+  --pl-muted: #5b4b70;
+  --pl-faint: #6f6184;
+  --pl-line: #e2d9f0;
+  --pl-line-soft: #efe9f8;
+  --pl-brand: #6d28d9;
+  --pl-brand-strong: #4c1d95;
+  --pl-brand-soft: #efe8ff;
+  --pl-ok: #2f6b3f;
+  --pl-ok-bg: #e6f3e8;
+  --pl-warn: #7d4f12;
+  --pl-warn-bg: #fbf1dc;
+  --pl-bad: #9b2c3f;
+  --pl-bad-bg: #fbe7ea;
+  --pl-shadow: 0 1px 2px rgb(28 8 54 / 6%), 0 8px 24px rgb(28 8 54 / 6%);
+}
+
+/* ---------- Foco de teclado visible en todos los controles ---------- */
+:is(button, a, input, select, textarea, summary, [role='button']):focus-visible {
+  outline: 2px solid var(--pl-brand);
+  outline-offset: 2px;
+}
+.sidebar :is(button, a):focus-visible,
+.admin-entry:focus-visible {
+  outline-color: #c4b5fd;
+}
+
+/* ---------- Escala tipográfica legible en la consola ---------- */
+.app-shell .eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #5b4a73;
+}
+.app-shell .field-label {
+  font-size: 12px;
+  color: var(--pl-ink-2);
+}
+.app-shell .field-help,
+.app-shell .modal-info {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.app-shell .breadcrumbs {
+  font-size: 12px;
+}
+.app-shell .nav-caption,
+.app-shell .workspace-label {
+  font-size: 10px;
+}
+.app-shell .status-badge {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+.app-shell .consent-status {
+  font-size: 11px;
+  padding: 3px 7px;
+}
+.app-shell .app-mark {
+  font-size: 12px;
+}
+.app-shell .metric-item small,
+.app-shell .metric-note {
+  font-size: 11px;
+  color: var(--pl-muted);
+}
+.app-shell .metric-item strong {
+  font: 700 22px/1.1 'DM Mono', monospace;
+  color: var(--pl-ink);
+}
+
+/* ---------- Métricas: fondo claro y cifras legibles ---------- */
+.app-shell .metrics-row {
+  background: #fff;
+  border-color: var(--pl-line);
+  border-radius: 14px;
+  box-shadow: var(--pl-shadow);
+}
+.app-shell .metric-item {
+  border-color: var(--pl-line-soft);
+}
+
+/* ---------- Estados: contraste AA ---------- */
+.app-shell .status-authorized,
+.consent-granted,
+.app-shell .status-badge.status-authorized {
+  background: var(--pl-ok-bg);
+  color: var(--pl-ok);
+}
+.app-shell .status-pending,
+.consent-pending,
+.app-shell .status-badge.status-pending {
+  background: var(--pl-warn-bg);
+  color: var(--pl-warn);
+}
+.app-shell .status-disabled,
+.consent-denied,
+.app-shell .status-badge.status-disabled {
+  background: var(--pl-bad-bg);
+  color: var(--pl-bad);
+}
+.consent-revoked {
+  background: #ece5f2;
+  color: #5d4b69;
+}
+.app-shell .check-word-ok,
+.app-shell .verified-label {
+  color: #3c6a48;
+}
+.app-shell .json-chip {
+  color: #4f5e56;
+}
+.app-shell .admin-pending-note {
+  color: #6a5680;
+}
+.app-shell .data-policy-unavailable {
+  color: #6a5a78;
+}
+
+/* Marcas de aplicación: texto más oscuro sobre el mismo fondo */
+.app-mark-green { color: #2c5d3c; }
+.app-mark-coral { color: #8a3c2a; }
+.app-mark-orange { color: #6f4716; }
+.app-mark-blue { color: #2f4d68; }
+.app-mark-pink { color: #7a3a50; }
+.app-mark-slate { color: #3f4f48; }
+
+/* Etiqueta de sistema no disponible: era texto oscuro sobre fondo oscuro */
+.simulator-tag {
+  background: var(--pl-brand-soft);
+  border-color: var(--pl-line);
+  color: var(--pl-brand-strong);
+}
+.simulator-tag.system-offline {
+  background: var(--pl-bad-bg);
+  border-color: #efc4cc;
+  color: var(--pl-bad);
+}
+
+/* Pares de datos y pistas: eran 7–8 px con texto pálido */
+.identity-facts > div > span {
+  font-size: 10px;
+  color: #5b4a73;
+}
+.service-copy small,
+.scope-copy small,
+.service-roles {
+  font-size: 11px;
+  color: #5f4f78;
+}
+.app-shell .role-hint {
+  font-size: 11px;
+  color: #5f6b64;
+}
+.app-shell .total-chip,
+.app-shell .count-bubble {
+  color: #4f3f66;
+  font-size: 11px;
+}
+
+/* ---------- Ficha de usuario: el botón ya no tapa la edad ---------- */
+.user-profile-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.user-profile-name > span {
+  font-size: 12px;
+  color: #5b4a73;
+}
+.user-profile-name .eyebrow {
+  font-size: 10px;
+}
+.user-profile-name h2 {
+  font-size: 22px;
+}
+.personal-edit-trigger {
+  margin-top: 8px;
+}
+
+/* ---------- Jerarquía de filas: nombre primero, detalle después ---------- */
+.app-cell-copy strong,
+.user-result-copy strong {
+  font: 700 13px/1.25 var(--sans);
+  color: var(--pl-ink);
+}
+.app-cell-copy small,
+.user-result-copy small {
+  font: 500 11px/1.35 var(--sans);
+  color: var(--pl-muted);
+}
+.user-result-copy small {
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0;
+}
+
+/* ---------- Pasarela: pasos sin tachar y columnas equilibradas ---------- */
+.public-shell .gateway-progress li {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.public-shell .gateway-progress li:not(:last-child)::after {
+  top: 12px;
+  left: 30px;
+  right: 4px;
+}
+.public-shell .gateway-progress li small {
+  font-size: 11px;
+}
+.public-shell .gateway-page-bound > .gateway-request-card {
+  align-self: center;
+}
+.public-shell .gateway-page-bound > .gateway-privacy-footer {
+  grid-column: 1 / -1;
+  justify-self: center;
+  max-width: 720px;
+  text-align: center;
+}
+
+/* Textos de apoyo de la pasarela: contraste AA en tamaños pequeños */
+.public-shell .gateway-section-label {
+  color: #5e4f74;
+}
+.public-shell .gateway-page small {
+  color: #4f5666;
+}
+.public-shell .gateway-page .gateway-request-card small,
+.public-shell .gateway-page .gateway-request-card small {
+  color: #4f5666;
+}
+
+/* ---------- Notificaciones: centradas, legibles y sobre los modales ---------- */
+.toast {
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: max-content;
+  bottom: 24px;
+  transform: none;
+  z-index: 60;
+  max-width: calc(100vw - 32px);
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--pl-ink);
+  color: #f5f0ff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 16px 40px rgb(28 8 54 / 35%);
+  animation: pl-toast-in 0.2s ease-out;
+}
+@keyframes pl-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Acceso de Administración: fondo opaco para centrar la atención ---------- */
+.admin-login-backdrop {
+  background: rgb(28 8 54 / 78%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ---------- Movimiento: respetar la preferencia del sistema ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .modal-backdrop,
+  .integration-modal {
+    animation: none;
+  }
+}
+
+/* ---------- Móvil: métricas y textos de la consola ---------- */
+@media (max-width: 640px) {
+  .app-shell .metric-item strong {
+    font-size: 18px;
+  }
+  .app-shell .metric-item small {
+    font-size: 11px;
+  }
+  .toast {
+    bottom: 16px;
+    font-size: 12px;
+  }
+}
+
+/* ---------- Pie público: contacto para quejas y sugerencias ---------- */
+.public-footer .public-contact {
+  color: var(--pl-brand-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
