@@ -74,7 +74,7 @@ h2 {
 }
 
 h1 {
-  font-size: 56px;
+  font-size: 48px;
   letter-spacing: -1.68px;
   margin: 32px 0;
   @media (max-width: 1024px) {
@@ -83,12 +83,12 @@ h1 {
   }
 }
 h2 {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 118%;
   letter-spacing: -0.24px;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
-    font-size: 20px;
+    font-size: 22px;
   }
 }
 p {
@@ -104,7 +104,7 @@ code,
 }
 
 code {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);

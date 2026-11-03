@@ -1408,12 +1408,62 @@ function App() {
         </div>}
 
         {view === 'home' && <div className="public-home">
-          <section className="public-home-hero">
-            <div className="public-home-copy"><span className="public-kicker">IDENTIDAD DIGITAL · GRUPO LA PLACETA</span><h1>PlacetaID<br /><em>para La Placeta.</em></h1><p>Una sola identidad para acceder a los servicios del Grupo La Placeta. Protege tus datos y decide qué compartes.</p><div className="public-home-actions"><button className="public-home-primary" onClick={() => { setGatewayError(''); setView('gateway') }}><LockKeyhole size={15} />Iniciar sesión</button><button className="public-home-secondary" onClick={() => { setGatewayError(''); setGatewayPassword(''); setView('register') }}><UserRoundPlus size={15} />Darme de alta online</button></div><span className="home-access-note"><ShieldCheck size={15} />El alta online verifica tu cuenta PL26 existente.</span></div>
-            <div className="public-home-card"><span className="home-card-icon"><Fingerprint size={25} /></span><span className="public-kicker">PLACETAID</span><h2>Acceso seguro<br />para todo el ecosistema.</h2><div className="home-card-line"><ShieldCheck size={16} /><span>Sin contraseñas compartidas</span></div><div className="home-card-line"><LockKeyhole size={16} /><span>Tú decides cada dato</span></div></div>
+          <section className="ph-hero">
+            <div className="ph-hero-copy">
+              <span className="ph-pill"><i />Identidad digital · Grupo La Placeta</span>
+              <h1>PlacetaID<span>para La Placeta.</span></h1>
+              <p>Una sola identidad para acceder a los servicios del Grupo La Placeta. Protege tus datos y decide qué compartes.</p>
+              <div className="ph-actions">
+                <button className="ph-btn-primary" onClick={() => { setGatewayError(''); setView('gateway') }}><LockKeyhole size={16} />Iniciar sesión</button>
+                <button className="ph-btn-ghost" onClick={() => { setGatewayError(''); setGatewayPassword(''); setView('register') }}><UserRoundPlus size={16} />Darme de alta online</button>
+              </div>
+              <p className="ph-fine"><ShieldCheck size={15} />El alta online verifica tu cuenta PL26 existente.</p>
+              <ul className="ph-points">
+                <li><Check size={14} />Sin contraseñas compartidas</li>
+                <li><Check size={14} />Tú decides cada dato</li>
+                <li><Check size={14} />Una sola identidad en todo el grupo</li>
+              </ul>
+            </div>
+            <div className="ph-visual" aria-hidden="true">
+              <div className="ph-card">
+                <div className="ph-card-top"><span className="ph-seal"><Fingerprint size={22} /></span><span className="ph-card-tag">PLACETAID</span></div>
+                <h2>Acceso seguro para todo el ecosistema.</h2>
+                <div className="ph-card-rows">
+                  <div><ShieldCheck size={15} />Sin contraseñas compartidas</div>
+                  <div><LockKeyhole size={15} />Tú decides cada dato</div>
+                </div>
+              </div>
+              <div className="ph-request">
+                <span className="ph-request-mark"><Blocks size={18} /></span>
+                <div><strong>Una aplicación del grupo quiere acceder</strong><small>Nombre y PlacetaID · solo con tu permiso</small></div>
+                <div className="ph-request-actions"><span>Ahora no</span><span className="ph-allow">Permitir</span></div>
+              </div>
+            </div>
           </section>
-          <section className="public-home-features"><div><span className="public-feature-icon"><Fingerprint size={17} /></span><h3>Una identidad</h3><p>Accede con tu PlacetaID en los servicios del Grupo La Placeta.</p></div><div><span className="public-feature-icon"><ClipboardCheck size={17} /></span><h3>Todo a la vista</h3><p>Comprueba quién solicita acceso y para qué lo necesita.</p></div><div><span className="public-feature-icon"><ShieldCheck size={17} /></span><h3>Decides tú</h3><p>Autoriza cada dato sensible cuando lo consideres necesario.</p></div></section>
-          <section className="public-home-cta"><div><span className="public-kicker">CONTROL DEL TITULAR</span><h2>La identidad es tuya.</h2></div><div className="public-home-cta-actions"><span className="home-access-note"><LockKeyhole size={15} />Tus datos personales nunca se comparten sin autorización.</span><button className="public-home-plan-link" onClick={() => setPlanInfoOpen(true)}>Plan 2027 <span>Ámbito 25</span><ArrowRight size={14} /></button></div></section>
+
+          <section className="ph-steps">
+            <div className="ph-section-head">
+              <span className="ph-kicker">Cómo funciona</span>
+              <h2>Tres pasos, sin contraseñas compartidas.</h2>
+            </div>
+            <div className="ph-step-grid">
+              <article className="ph-step ph-step-1"><span className="ph-step-num">01</span><span className="ph-step-ico"><Fingerprint size={20} /></span><h3>Una identidad</h3><p>Accede con tu PlacetaID en los servicios del Grupo La Placeta.</p></article>
+              <article className="ph-step ph-step-2"><span className="ph-step-num">02</span><span className="ph-step-ico"><ClipboardCheck size={20} /></span><h3>Todo a la vista</h3><p>Comprueba quién solicita acceso y para qué lo necesita.</p></article>
+              <article className="ph-step ph-step-3"><span className="ph-step-num">03</span><span className="ph-step-ico"><ShieldCheck size={20} /></span><h3>Decides tú</h3><p>Autoriza cada dato sensible cuando lo consideres necesario.</p></article>
+            </div>
+          </section>
+
+          <section className="ph-cta">
+            <div className="ph-cta-copy">
+              <span className="ph-kicker ph-kicker-light">Control del titular</span>
+              <h2>La identidad es tuya.</h2>
+              <p><LockKeyhole size={15} />Tus datos personales nunca se comparten sin autorización.</p>
+            </div>
+            <div className="ph-cta-actions">
+              <button className="ph-btn-primary" onClick={() => { setGatewayError(''); setView('gateway') }}><LockKeyhole size={16} />Iniciar sesión</button>
+              <button className="ph-plan" onClick={() => setPlanInfoOpen(true)}><span>Plan 2027</span><small>Ámbito 25</small><ArrowRight size={14} /></button>
+            </div>
+          </section>
         </div>}
 
         {view === 'applications' && (
@@ -1560,7 +1610,7 @@ function App() {
                     <div className="gateway-app-copy"><span className="gateway-verified-label"><ShieldCheck size={12} />SOLICITUD VERIFICADA</span><h2>{gatewayPreview.app.name}</h2><p>Quiere iniciar sesión · {gatewayPreview.service.name}</p></div>
                     <span className="gateway-request-badge"><LockKeyhole size={13} />PlacetaID</span>
                   </div>
-                  <details className="gateway-request-details">
+                  <details className="gateway-request-details" open>
                     <summary><ShieldCheck size={14} /><span>Revisar datos, permisos y destino</span><ChevronDown size={14} /></summary>
                     <div className="gateway-request-grid">
                     <div className="gateway-request-section"><span className="gateway-section-label">SERVICIO SOLICITADO</span><strong>{gatewayPreview.service.name}</strong><p>{gatewayPreview.service.description || 'La aplicación ha solicitado identificarte para este servicio.'}</p></div>
