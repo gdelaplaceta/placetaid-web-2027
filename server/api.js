@@ -1633,6 +1633,90 @@ api.post('/public/consents', async (req, res) => {
   } catch (error) { handleDbError(res, error) }
 })
 
+
+const LEGAL_VERSION = 'v27-2026-10'
+const PRESENTATION_TTL_MS = 60_000
+
+async function findDeviceByToken(deviceToken, dip) {
+  if (!deviceToken) return null
+  const { data: user, error: userError } = await supabase.from('solicitantes')
+    .select('id,dip,alias,nombre_real,fecha_nacimiento,edad,rol,estado,lista_negra')
+    .eq('dip', dip).maybeSingle()
+  if (userError) throw userError
+  if (!user || Number(user.lista_negra) === 1) return null
+  const { data: device, error: deviceError } = await supabase.from('plid_v27_devices')
+    .select('id,user_id,method,active,expires_at,revoked_at')
+    .eq('session_token_hash', hashToken(deviceToken)).eq('user_id', user.id).maybeSingle()
+  if (deviceError) throw deviceError
+  if (!device || !device.active || device.revoked_at || Date.parse(device.expires_at) <= Date.now()) return null
+  return { user, device }
+}
+
+// El titular acepta términos y privacidad antes de vincular una identidad,
+// un dispositivo o un menor. La app solo envía esto tras leer ambos documentos.
+api.post('/public/device-legal', authLimiter, async (req, res) => {
+  const dip = normalizeDip(req.body?.dip)
+  const context = ['identity', 'device', 'junior'].includes(req.body?.context) ? req.body.context : 'identity'
+  if (!isValidDip(dip) || req.body?.termsRead !== true || req.body?.privacyRead !== true || req.body?.accepted !== true) {
+    return fail(res, 400, 'LEGAL_ACCEPTANCE_REQUIRED', 'Debes leer y aceptar los términos y la política de privacidad.')
+  }
+  if (req.body?.version !== LEGAL_VERSION) return fail(res, 409, 'LEGAL_VERSION_OUTDATED', 'Los documentos legales han cambiado. Actualiza la aplicación.')
+  try {
+    const bound = await findDeviceByToken(String(req.body?.deviceToken || ''), dip)
+    if (!bound) return fail(res, 401, 'INVALID_DEVICE', 'El dispositivo no está vinculado o ha caducado.')
+    const rows = ['terms', 'privacy'].map((document_type) => ({ user_id: bound.user.id, document_type, version: LEGAL_VERSION, context }))
+    const { error } = await supabase.from('plid_v27_legal_acceptances').upsert(rows, { onConflict: 'user_id,document_type,version', ignoreDuplicates: true })
+    if (error) throw error
+    await supabase.from('plid_v27_audit').insert({ actor_user_id: bound.user.id, target_user_id: bound.user.id, event_type: `legal_accepted_${context}`, details: { version: LEGAL_VERSION } })
+    res.json({ ok: true, version: LEGAL_VERSION })
+  } catch (error) { handleDbError(res, error) }
+})
+
+// Emite un código de verificación de 8 caracteres (igual que los de las solicitudes v27)
+// para presentar la identidad por QR o NFC. Una llamada admite varias identidades.
+api.post('/public/presentations', authLimiter, async (req, res) => {
+  const channel = req.body?.channel === 'nfc' ? 'nfc' : 'qr'
+  const identities = Array.isArray(req.body?.identities) ? req.body.identities.slice(0, 5) : []
+  if (!identities.length) return fail(res, 400, 'IDENTITIES_REQUIRED', 'Selecciona al menos una identidad.')
+  try {
+    const issued = []
+    for (const item of identities) {
+      const dip = normalizeDip(item?.dip)
+      if (!isValidDip(dip)) return fail(res, 400, 'INVALID_DIP', 'Revisa el DIP.')
+      const bound = await findDeviceByToken(String(item?.deviceToken || ''), dip)
+      if (!bound) return fail(res, 401, 'INVALID_DEVICE', `El dispositivo no está vinculado a ${dip}.`)
+      const code = randomBytes(4).toString('hex').toUpperCase()
+      const expiresAt = new Date(Date.now() + PRESENTATION_TTL_MS).toISOString()
+      const { error } = await supabase.from('plid_v27_presentations').insert({ user_id: bound.user.id, device_id: bound.device.id, code_hash: hashToken(`${dip}:${code}`), channel, expires_at: expiresAt })
+      if (error) throw error
+      issued.push({ dip, code, expiresAt })
+    }
+    res.status(201).json({ ok: true, ttlSeconds: PRESENTATION_TTL_MS / 1000, identities: issued })
+  } catch (error) { handleDbError(res, error) }
+})
+
+// Lector: comprueba un DIP + código. Es de un solo uso y solo devuelve indicadores de edad.
+api.post('/public/presentations/verify', authLimiter, async (req, res) => {
+  const dip = normalizeDip(req.body?.dip)
+  const code = String(req.body?.code || '').toUpperCase().replace(/[^0-9A-F]/g, '')
+  if (!isValidDip(dip) || code.length !== 8) return fail(res, 400, 'INVALID_PRESENTATION', 'DIP o código no válidos.')
+  try {
+    const { data: row, error } = await supabase.from('plid_v27_presentations')
+      .select('id,user_id,expires_at,used_at').eq('code_hash', hashToken(`${dip}:${code}`)).maybeSingle()
+    if (error) throw error
+    if (!row || row.used_at || Date.parse(row.expires_at) <= Date.now()) return fail(res, 410, 'PRESENTATION_EXPIRED', 'El código ha caducado o ya se utilizó.')
+    const { data: claimed, error: claimError } = await supabase.from('plid_v27_presentations')
+      .update({ used_at: new Date().toISOString() }).eq('id', row.id).is('used_at', null).select('id').maybeSingle()
+    if (claimError) throw claimError
+    if (!claimed) return fail(res, 409, 'PRESENTATION_ALREADY_USED', 'El código ya se utilizó.')
+    const { data: user, error: userError } = await supabase.from('solicitantes')
+      .select('id,dip,nombre_real,fecha_nacimiento,edad,estado,lista_negra').eq('id', row.user_id).maybeSingle()
+    if (userError) throw userError
+    const age = calculateAge(user)
+    res.json({ ok: true, dip, name: user.nombre_real || null, over16: age === null ? null : age >= 16, over18: age === null ? null : age >= 18, active: Number(user.lista_negra) !== 1 })
+  } catch (error) { handleDbError(res, error) }
+})
+
 api.use(legacyApi)
 
 export { calculateAge, mapIntegration, mapService, requireAdmin }
