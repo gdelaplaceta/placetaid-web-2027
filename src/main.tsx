@@ -5,6 +5,8 @@ import App from './App.tsx'
 import './theme.css'
 import './identity.css'
 import './redesign.css'
+import '@fontsource-variable/sora'
+import './login.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
